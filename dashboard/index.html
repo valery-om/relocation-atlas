@@ -19,7 +19,7 @@
       <span class="brand-mark" aria-hidden="true"><i></i><b>А</b></span>
       <span class="brand-copy">
         <strong>Атлас переезда</strong>
-        <small>Россия · срез 17.07.2026</small>
+        <small>переезд · ВНЖ · гражданство</small>
       </span>
     </a>
     <div class="top-status" aria-label="Статус данных">
@@ -44,7 +44,6 @@
         <p>Сначала решите, что вам нужно: пожить, закрепиться или построить второе гражданство. Атлас разделит эти цели, проверит бюджет и покажет, где заканчивается каждый маршрут.</p>
         <div class="hero-actions">
           <a class="primary-button" href="#atlas">Собрать свой маршрут <span>↓</span></a>
-          <a class="text-button" href="#visaCatalog">Каталог виз</a>
           <button class="text-button" type="button" data-open-method>Как обновляются данные</button>
         </div>
       </div>
@@ -55,7 +54,7 @@
         <div class="orbit orbit-two"><span>02</span></div>
         <div class="orbit orbit-three"><span>03</span></div>
         <div class="orbit-core">
-          <span>RU</span>
+          <span>YOU</span>
           <strong>→</strong>
           <small>WORLD</small>
         </div>
@@ -68,7 +67,7 @@
         <div><strong>3</strong><span>уровня решения</span></div>
         <div><strong id="heroSources">63</strong><span>источника маршрутов</span></div>
         <div><strong id="heroCities">50</strong><span>городских профилей</span></div>
-        <div><strong>RU</strong><span>первая nationality</span></div>
+        <div><strong>GLOBAL</strong><span>nationality-aware</span></div>
       </div>
     </section>
 
@@ -79,7 +78,7 @@
             <span class="panel-index">INPUT / 01</span>
             <h2>Ваши<br><em>координаты</em></h2>
           </div>
-          <span class="save-indicator"><i></i> сохранено локально</span>
+          <span class="save-indicator"><i></i> только в этом браузере</span>
         </div>
 
         <form id="profileForm">
@@ -173,15 +172,15 @@
               </label>
             </div>
             <label class="field">
-              <span>Цель первого этапа</span>
-              <select id="stayStyleInput" name="stayStyle">
-                <option value="wintering">Зимовка / пожить сезон</option>
-                <option value="trial">Попробовать и перейти на ВНЖ</option>
-                <option value="anchor">Сразу строить citizenship clock</option>
+              <span>Какой результат вам нужен</span>
+              <select id="levelInput" name="level">
+                <option value="temporary">Пожить сезон / попробовать</option>
+                <option value="residence">Переехать и получить ВНЖ</option>
+                <option value="citizenship">Строить путь к гражданству</option>
               </select>
             </label>
             <label class="field">
-              <span>Максимум до гражданства</span>
+              <span>Горизонт планирования</span>
               <div class="range-row">
                 <input id="horizonInput" name="horizon" type="range" min="1" max="12" step="1" value="6">
                 <output id="horizonOutput">6 лет</output>
@@ -241,58 +240,25 @@
               <label><span>Скорость</span><input type="range" min="0" max="10" value="7" data-weight="speed"><output>7</output></label>
             </div>
           </details>
+          <div class="form-actions">
+            <button class="calculate-button" id="calculateButton" type="submit"><span>Рассчитать траектории</span><b>→</b></button>
+            <small>Ответы не отправляются на сервер и остаются в вашем браузере.</small>
+          </div>
         </form>
       </aside>
 
       <div class="atlas-main">
-        <section class="level-navigator" aria-labelledby="levelTitle">
-          <div class="section-heading compact-heading">
-            <div>
-              <span class="panel-index">OUTCOME / 02</span>
-              <h2 id="levelTitle">Насколько далеко<br>смотрим?</h2>
-            </div>
-            <p>Уровни вложены. На первом видны все доступные входы; дальше остаются только маршруты, которые действительно могут закрепить статус.</p>
-          </div>
-
-          <div class="level-track" role="tablist" aria-label="Уровень маршрута">
-            <button class="level-step active" type="button" role="tab" aria-selected="true" data-level="temporary">
-              <span class="step-number">01</span>
-              <span class="step-line"></span>
-              <strong>Зимовка / попробовать</strong>
-              <small>1–24 месяца без обещания ВНЖ</small>
-              <b>ENTRY</b>
-            </button>
-            <button class="level-step" type="button" role="tab" aria-selected="false" data-level="residence">
-              <span class="step-number">02</span>
-              <span class="step-line"></span>
-              <strong>Закрепиться</strong>
-              <small>ВНЖ, продление, ПМЖ</small>
-              <b>STATUS</b>
-            </button>
-            <button class="level-step" type="button" role="tab" aria-selected="false" data-level="citizenship">
-              <span class="step-number">03</span>
-              <span class="step-line"></span>
-              <strong>Гражданство</strong>
-              <small>clock, супруг, второй паспорт</small>
-              <b>ANCHOR</b>
-            </button>
-          </div>
-          <div class="level-description" id="levelDescription"></div>
+        <section class="calculation-gate" id="calculationGate" aria-labelledby="calculationGateTitle">
+          <span class="panel-index">RESULT / 02</span>
+          <div class="gate-orbit" aria-hidden="true"><i></i><b>→</b></div>
+          <h2 id="calculationGateTitle">Сначала —<br>ваши ответы.<br><em>Потом — страны.</em></h2>
+          <p id="calculationGateText">Заполните анкету и нажмите «Рассчитать». Здесь появятся лидер, три ближайшие траектории и объяснение почему.</p>
+          <div class="gate-steps"><span><b>01</b>анкета</span><span><b>02</b>расчёт</span><span><b>03</b>сравнение</span></div>
+          <button class="gate-calculate-button" id="gateCalculateButton" type="button">Рассчитать сейчас →</button>
         </section>
 
-        <section class="visa-catalog" id="visaCatalog" aria-labelledby="visaCatalogTitle">
-          <div class="section-heading visa-catalog-heading">
-            <div>
-              <span class="panel-index">VISA TYPES / 03</span>
-              <h2 id="visaCatalogTitle">Не название.<br><em>Основание входа.</em></h2>
-            </div>
-            <p>Тип визы и финальный outcome разделены. Одна talent-виза может быть временной, другая — сразу давать permanent status.</p>
-          </div>
-          <div class="visa-type-grid" id="visaTypeGrid" role="tablist" aria-label="Каталог видов виз"></div>
-          <div class="visa-catalog-focus" id="visaCatalogFocus" aria-live="polite"></div>
-        </section>
-
-        <section class="result-overview" aria-label="Текущий результат">
+        <div class="results-flow" id="resultsFlow" hidden>
+        <section class="result-overview" id="resultStart" aria-label="Текущий результат">
           <div class="overview-main">
             <span>Текущий лидер</span>
             <strong id="leaderName">—</strong>
@@ -307,7 +273,7 @@
         <section class="shortlist-section" aria-labelledby="shortlistTitle">
           <div class="section-heading">
             <div>
-              <span class="panel-index">SHORTLIST / 04</span>
+              <span class="panel-index">YOUR MATCHES / 02</span>
               <h2 id="shortlistTitle">Три ближайшие<br><em>траектории</em></h2>
             </div>
             <p>Красная линия — hard blocker. Жёлтая — маршрут возможен, но перед действием остались непроверенные условия.</p>
@@ -315,21 +281,33 @@
           <div class="shortlist" id="shortlist"></div>
         </section>
 
+        <section class="visa-catalog" id="visaCatalog" aria-labelledby="visaCatalogTitle">
+          <div class="section-heading visa-catalog-heading">
+            <div>
+              <span class="panel-index">VISA TYPES / 03</span>
+              <h2 id="visaCatalogTitle">Не название.<br><em>Основание входа.</em></h2>
+            </div>
+            <p>Тип визы и финальный outcome разделены. Одна talent-виза может быть временной, другая — сразу давать permanent status.</p>
+          </div>
+          <div class="visa-type-grid" id="visaTypeGrid" role="tablist" aria-label="Каталог видов виз"></div>
+          <div class="visa-catalog-focus" id="visaCatalogFocus" aria-live="polite"></div>
+        </section>
+
         <section class="explorer-section" aria-labelledby="explorerTitle">
           <div class="section-heading explorer-heading">
             <div>
-              <span class="panel-index">WORLD INDEX / 05</span>
+              <span class="panel-index">WORLD INDEX / 04</span>
               <h2 id="explorerTitle">Глобальный<br><em>экран</em></h2>
             </div>
             <div class="explorer-tools">
               <label class="search-field"><span>⌕</span><input id="searchInput" type="search" placeholder="Страна, город или маршрут" aria-label="Поиск страны, города или маршрута"></label>
-              <select id="sortInput" aria-label="Сортировка">
-                <option value="score">По совпадению</option>
-                <option value="budget">По бюджету</option>
-                <option value="speed">По скорости</option>
-                <option value="certainty">По проверенности</option>
-                <option value="infra">По инфраструктуре</option>
-              </select>
+              <label class="sort-field"><span>Сначала показать</span><select id="sortInput" aria-label="Сортировка">
+                  <option value="score">Лучшее совпадение</option>
+                  <option value="budget">Самые доступные</option>
+                  <option value="speed">Самые быстрые</option>
+                  <option value="certainty">Самые проверенные</option>
+                  <option value="infra">Лучшая инфраструктура</option>
+                </select></label>
             </div>
           </div>
 
@@ -364,7 +342,7 @@
         <section class="compare-section" id="compareSection" aria-labelledby="compareTitle">
           <div class="section-heading">
             <div>
-              <span class="panel-index">COMPARE / 06</span>
+              <span class="panel-index">COMPARE / 05</span>
               <h2 id="compareTitle">Один экран.<br><em>Три маршрута.</em></h2>
             </div>
             <p id="compareHint">Закрепите до трёх карточек. Здесь появится сравнение стоимости, статуса, работы и источников.</p>
@@ -381,7 +359,7 @@
 
         <section class="coverage-section" aria-labelledby="coverageTitle">
           <div class="coverage-copy">
-            <span class="panel-index">DATA ROOM / 07</span>
+            <span class="panel-index">DATA ROOM / 06</span>
             <h2 id="coverageTitle">Что уже известно —<br><em>и что ещё нет</em></h2>
             <p>Атлас специально показывает границы знания. Текущий срез моделирует 35 стран из 57 в screening universe. Наличие карточки не означает рекомендацию; отсутствие — не означает, что страна невозможна.</p>
             <button class="text-button light" type="button" data-open-method>Открыть методику и очередь обновлений →</button>
@@ -408,6 +386,7 @@
             <a href="https://www.henleyglobal.com/passport-index/methodology" target="_blank" rel="noreferrer">Passport methodology</a>
           </nav>
         </footer>
+        </div>
       </div>
     </section>
   </main>

@@ -76,6 +76,8 @@
   var state = loadProfile();
   var computed = [];
   var visibleLimit = PAGE_SIZE;
+  var hasCalculated = false;
+  var calculationDirty = false;
   var lastFocus = null;
   var toastTimer = null;
 
@@ -111,6 +113,10 @@
     if (!Number.isFinite(number)) number = fallback;
     number = Math.max(min, Math.min(max, number));
     return integer ? Math.round(number) : number;
+  }
+
+  function stayStyleForLevel(level) {
+    return { temporary: "wintering", residence: "trial", citizenship: "anchor" }[level] || "wintering";
   }
 
   function loadProfile() {
@@ -167,6 +173,7 @@
       return DATA.entries.some(function (entry) { return entry.id === id; });
     }).slice(0, 3) : [];
     if (!LEVEL_RANK[profile.level]) profile.level = "temporary";
+    profile.stayStyle = stayStyleForLevel(profile.level);
     if (!VISA_TYPES_BY_ID[profile.catalogType]) profile.catalogType = "talent";
     if (profile.visaTypeFilter !== "all" && !VISA_TYPES_BY_ID[profile.visaTypeFilter]) profile.visaTypeFilter = "all";
     return profile;
@@ -526,15 +533,51 @@
     render();
   }
 
+  function renderCalculationState() {
+    var showResults = hasCalculated && !calculationDirty;
+    $("#resultsFlow").hidden = !showResults;
+    $("#calculationGate").hidden = showResults;
+    $("#calculateButton span").textContent = hasCalculated ? "Пересчитать траектории" : "Рассчитать траектории";
+    if (!showResults) {
+      $("#calculationGateTitle").innerHTML = calculationDirty
+        ? 'Данные изменились.<br><em>Обновим маршрут.</em>'
+        : 'Сначала —<br>ваши ответы.<br><em>Потом — страны.</em>';
+      $("#calculationGateText").textContent = calculationDirty
+        ? "Мы сохранили новые ответы. Нажмите «Пересчитать», чтобы не смешивать старый результат с новым профилем."
+        : "Заполните анкету и нажмите «Рассчитать». Здесь появятся лидер, три ближайшие траектории и объяснение почему.";
+      $("#gateCalculateButton").textContent = calculationDirty ? "Пересчитать →" : "Рассчитать сейчас →";
+    }
+  }
+
+  function calculateRoutes(shouldScroll) {
+    state.stayStyle = stayStyleForLevel(state.level);
+    hasCalculated = true;
+    calculationDirty = false;
+    visibleLimit = PAGE_SIZE;
+    recompute();
+    if (shouldScroll) requestAnimationFrame(function () {
+      $("#resultStart").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }
+
+  function markCalculationDirty() {
+    state.stayStyle = stayStyleForLevel(state.level);
+    visibleLimit = PAGE_SIZE;
+    if (hasCalculated) calculationDirty = true;
+    saveProfile();
+    renderCalculationState();
+    renderDock();
+  }
+
   function render() {
     renderTopMeta();
-    renderLevel();
     renderVisaCatalog();
     renderOverview();
     renderShortlist();
     renderFilters();
     renderRouteList();
     renderComparison();
+    renderCalculationState();
     renderDock();
   }
 
@@ -546,15 +589,6 @@
     $("#topCountryCount").textContent = countries.size;
     $("#heroSources").textContent = sourceCount;
     $("#heroCities").textContent = cityCount;
-  }
-
-  function renderLevel() {
-    $$("[data-level]").forEach(function (button) {
-      var active = button.dataset.level === state.level;
-      button.classList.toggle("active", active);
-      button.setAttribute("aria-selected", active ? "true" : "false");
-    });
-    $("#levelDescription").innerHTML = '<strong>' + escapeHtml(DATA.levels[state.level].short) + '</strong> · ' + escapeHtml(DATA.levels[state.level].description);
   }
 
   function renderVisaCatalog() {
@@ -731,7 +765,7 @@
   function renderDock() {
     var dock = $("#compareDock");
     var entries = state.pinned.map(function (id) { return DATA.entries.find(function (entry) { return entry.id === id; }); }).filter(Boolean);
-    dock.classList.toggle("visible", entries.length > 0);
+    dock.classList.toggle("visible", hasCalculated && !calculationDirty && entries.length > 0);
     $("#dockItems").innerHTML = entries.map(function (entry) { return '<span class="dock-item" title="' + escapeHtml(entry.country) + '">' + entry.flag + '</span>'; }).join("");
     $("#dockCount").textContent = entries.length;
   }
@@ -899,7 +933,7 @@
     $("#climateInput").value = state.climate;
     $("#seaPreferenceInput").value = state.seaPreference;
     $("#mountainPreferenceInput").value = state.mountainPreference;
-    $("#stayStyleInput").value = state.stayStyle;
+    $("#levelInput").value = state.level;
     $("#workModeInput").value = state.workMode;
     $("#skillSectorInput").value = state.skillSector;
     $("#skillTextInput").value = state.skillText;
@@ -924,10 +958,10 @@
     var eventName = type === "checkbox" || element.tagName === "SELECT" ? "change" : "input";
     element.addEventListener(eventName, function (event) {
       state[key] = type === "checkbox" ? event.target.checked : type === "number" ? Number(event.target.value || 0) : event.target.value;
+      if (key === "level") state.stayStyle = stayStyleForLevel(state.level);
       if (key === "horizon") $("#horizonOutput").textContent = state.horizon + " лет";
       if (key === "workMode") renderWorkHint();
-      visibleLimit = PAGE_SIZE;
-      recompute();
+      markCalculationDirty();
     });
   }
 
@@ -944,7 +978,7 @@
     bindProfileInput("climateInput", "climate", "text");
     bindProfileInput("seaPreferenceInput", "seaPreference", "text");
     bindProfileInput("mountainPreferenceInput", "mountainPreference", "text");
-    bindProfileInput("stayStyleInput", "stayStyle", "text");
+    bindProfileInput("levelInput", "level", "text");
     bindProfileInput("workModeInput", "workMode", "text");
     bindProfileInput("skillSectorInput", "skillSector", "text");
     bindProfileInput("skillTextInput", "skillText", "text");
@@ -959,21 +993,15 @@
       input.addEventListener("input", function () {
         state.weights[input.dataset.weight] = Number(input.value);
         input.parentElement.querySelector("output").textContent = input.value;
-        recompute();
+        markCalculationDirty();
       });
     });
 
-    $$("[data-level]").forEach(function (button) {
-      button.addEventListener("click", function () {
-        state.level = button.dataset.level;
-        state.search = "";
-        state.segment = "all";
-        state.visaTypeFilter = "all";
-        visibleLimit = PAGE_SIZE;
-        syncForm();
-        recompute();
-      });
+    $("#profileForm").addEventListener("submit", function (event) {
+      event.preventDefault();
+      calculateRoutes(true);
     });
+    $("#gateCalculateButton").addEventListener("click", function () { calculateRoutes(true); });
 
     $$("[data-segment]").forEach(function (button) {
       button.addEventListener("click", function () {
@@ -1088,6 +1116,8 @@
           var parsed = JSON.parse(reader.result);
           state = mergeProfile(parsed.profile || parsed);
           visibleLimit = PAGE_SIZE;
+          hasCalculated = false;
+          calculationDirty = false;
           syncForm();
           recompute();
           showToast("Профиль импортирован");
@@ -1103,6 +1133,8 @@
       if (!window.confirm("Сбросить введённые данные и закреплённые маршруты?")) return;
       state = clone(DEFAULT_PROFILE);
       visibleLimit = PAGE_SIZE;
+      hasCalculated = false;
+      calculationDirty = false;
       syncForm();
       recompute();
       showToast("Профиль сброшен");
