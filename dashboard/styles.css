@@ -332,6 +332,7 @@ img, svg { max-width: 100%; }
   max-width: 1600px;
   margin: 0 auto;
   padding: 60px clamp(18px, 4vw, 64px) 0;
+  scroll-margin-top: 88px;
   display: grid;
   grid-template-columns: 345px minmax(0, 1fr);
   gap: 24px;
