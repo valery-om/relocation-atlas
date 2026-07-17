@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="description" content="Атлас переезда — интерактивная платформа сравнения временного переезда, ВНЖ и гражданства.">
+  <title>Атлас переезда — построить траекторию</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Commissioner:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <a class="skip-link" href="#atlas">Перейти к маршрутам</a>
+
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="Атлас переезда — наверх">
+      <span class="brand-mark" aria-hidden="true"><i></i><b>А</b></span>
+      <span class="brand-copy">
+        <strong>Атлас переезда</strong>
+        <small>Россия · срез 17.07.2026</small>
+      </span>
+    </a>
+    <div class="top-status" aria-label="Статус данных">
+      <span class="live-dot"></span>
+      <span><b id="topRouteCount">40</b> маршрутов</span>
+      <span><b id="topCountryCount">35</b> стран</span>
+      <span class="top-status-muted">57 в screening universe</span>
+    </div>
+    <nav class="top-actions" aria-label="Действия с профилем">
+      <button class="quiet-button" type="button" id="importButton" title="Импортировать профиль"><span>↥</span><b>Импорт</b></button>
+      <button class="quiet-button" type="button" id="exportButton" title="Экспортировать профиль"><span>↧</span><b>Экспорт</b></button>
+      <button class="quiet-button danger" type="button" id="resetButton" title="Сбросить профиль"><span>↺</span><b>Сбросить</b></button>
+      <input type="file" id="importInput" accept="application/json" hidden>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-copy">
+        <div class="eyebrow">Навигационная система для жизни</div>
+        <h1>Не страна.<br><em>Траектория.</em></h1>
+        <p>Сначала решите, что вам нужно: пожить, закрепиться или построить второе гражданство. Атлас разделит эти цели, проверит бюджет и покажет, где заканчивается каждый маршрут.</p>
+        <div class="hero-actions">
+          <a class="primary-button" href="#atlas">Собрать свой маршрут <span>↓</span></a>
+          <a class="text-button" href="#visaCatalog">Каталог виз</a>
+          <button class="text-button" type="button" data-open-method>Как обновляются данные</button>
+        </div>
+      </div>
+
+      <div class="orbit-visual" aria-label="Три уровня маршрута: временный переезд, ВНЖ и гражданство">
+        <div class="coordinate">55°45′ N<br>37°37′ E</div>
+        <div class="orbit orbit-one"><span>01</span></div>
+        <div class="orbit orbit-two"><span>02</span></div>
+        <div class="orbit orbit-three"><span>03</span></div>
+        <div class="orbit-core">
+          <span>RU</span>
+          <strong>→</strong>
+          <small>WORLD</small>
+        </div>
+        <div class="orbit-caption caption-one">пожить</div>
+        <div class="orbit-caption caption-two">закрепиться</div>
+        <div class="orbit-caption caption-three">гражданство</div>
+      </div>
+
+      <div class="coverage-ribbon" aria-label="Покрытие первой версии">
+        <div><strong>3</strong><span>уровня решения</span></div>
+        <div><strong id="heroSources">63</strong><span>источника маршрутов</span></div>
+        <div><strong id="heroCities">50</strong><span>городских профилей</span></div>
+        <div><strong>RU</strong><span>первая nationality</span></div>
+      </div>
+    </section>
+
+    <section class="atlas-shell" id="atlas">
+      <aside class="profile-panel" aria-label="Профиль переезда">
+        <div class="profile-heading">
+          <div>
+            <span class="panel-index">INPUT / 01</span>
+            <h2>Ваши<br><em>координаты</em></h2>
+          </div>
+          <span class="save-indicator"><i></i> сохранено локально</span>
+        </div>
+
+        <form id="profileForm">
+          <fieldset>
+            <legend>Кто переезжает</legend>
+            <label class="field">
+              <span>Гражданство</span>
+              <select id="nationalityInput" name="nationality">
+                <option value="RU">Россия · доступно</option>
+                <option value="UA" disabled>Украина · следующий слой</option>
+                <option value="BY" disabled>Беларусь · следующий слой</option>
+              </select>
+            </label>
+            <div class="two-fields">
+              <label class="field">
+                <span>Взрослых</span>
+                <input id="adultsInput" name="adults" type="number" min="1" max="6" step="1" value="2">
+              </label>
+              <label class="field">
+                <span>Детей</span>
+                <input id="childrenInput" name="children" type="number" min="0" max="8" step="1" value="0">
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Деньги в USD</legend>
+            <label class="field money-field">
+              <span>Текущий доход семьи / мес.</span>
+              <input id="incomeInput" name="income" type="number" min="0" step="100" value="4000">
+            </label>
+            <label class="field money-field">
+              <span>Сколько тратите сейчас / мес.</span>
+              <input id="currentSpendInput" name="currentSpend" type="number" min="0" step="100" value="2200">
+            </label>
+            <label class="field money-field">
+              <span>Максимум готовы тратить / мес.</span>
+              <input id="budgetInput" name="budget" type="number" min="500" step="100" value="2500">
+            </label>
+            <div class="two-fields">
+              <label class="field money-field compact">
+                <span>Накопления</span>
+                <input id="savingsInput" name="savings" type="number" min="0" step="1000" value="15000">
+              </label>
+              <label class="field money-field compact">
+                <span>Инвестиции</span>
+                <input id="investmentInput" name="investment" type="number" min="0" step="5000" value="0">
+              </label>
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>Как хотите жить</legend>
+            <label class="field">
+              <span>Часть мира</span>
+              <select id="zoneInput" name="zone">
+                <option value="all">Весь мир</option>
+                <option value="asia">Азия</option>
+                <option value="europe">Европа</option>
+                <option value="eurasia">Кавказ и Центральная Азия</option>
+                <option value="americas">Северная, Центральная и Южная Америка</option>
+                <option value="africa-islands">Африка и острова</option>
+                <option value="oceania">Океания</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Климат</span>
+              <select id="climateInput" name="climate">
+                <option value="any">Не принципиально</option>
+                <option value="warm">Тепло / море</option>
+                <option value="temperate">Четыре сезона</option>
+                <option value="cool">Прохладно</option>
+              </select>
+            </label>
+            <div class="two-fields">
+              <label class="field">
+                <span>Море</span>
+                <select id="seaPreferenceInput" name="seaPreference">
+                  <option value="any">Не важно</option>
+                  <option value="direct">В городе</option>
+                  <option value="near">Можно рядом</option>
+                </select>
+              </label>
+              <label class="field">
+                <span>Горы</span>
+                <select id="mountainPreferenceInput" name="mountainPreference">
+                  <option value="any">Не важно</option>
+                  <option value="direct">В городе</option>
+                  <option value="near">До двух часов</option>
+                </select>
+              </label>
+            </div>
+            <label class="field">
+              <span>Цель первого этапа</span>
+              <select id="stayStyleInput" name="stayStyle">
+                <option value="wintering">Зимовка / пожить сезон</option>
+                <option value="trial">Попробовать и перейти на ВНЖ</option>
+                <option value="anchor">Сразу строить citizenship clock</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Максимум до гражданства</span>
+              <div class="range-row">
+                <input id="horizonInput" name="horizon" type="range" min="1" max="12" step="1" value="6">
+                <output id="horizonOutput">6 лет</output>
+              </div>
+            </label>
+          </fieldset>
+
+          <fieldset>
+            <legend>Как будете зарабатывать</legend>
+            <label class="field">
+              <span>Формат работы</span>
+              <select id="workModeInput" name="workMode">
+                <option value="remote">Удалённая работа на зарубеж</option>
+                <option value="local-job">Ищу местный найм</option>
+                <option value="self-employed">Свои клиенты / self-employed</option>
+                <option value="hands-on">Работа руками или с клиентами</option>
+                <option value="not-working">Пока не планирую работать</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Сфера навыков</span>
+              <select id="skillSectorInput" name="skillSector">
+                <option value="digital">Digital / IT / online</option>
+                <option value="professional">Право, финансы, консалтинг</option>
+                <option value="beauty">Красота / маникюр / hair</option>
+                <option value="hospitality">Кафе, отели, сервис</option>
+                <option value="trades">Ремесло и технические навыки</option>
+                <option value="care">Уход, здоровье, обучение</option>
+                <option value="creative">Креативные профессии</option>
+                <option value="other">Другое</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Конкретный навык · необязательно</span>
+              <input id="skillTextInput" name="skillText" type="text" maxlength="120" placeholder="Например: маникюр, frontend, преподавание">
+            </label>
+            <p class="work-mode-hint" id="workModeHint"></p>
+          </fieldset>
+
+          <fieldset>
+            <legend>Допустимые основания</legend>
+            <label class="switch-row"><span>Готовы учиться очно</span><input id="studyInput" type="checkbox" checked><i></i></label>
+            <label class="switch-row"><span>Есть talent-гипотеза</span><input id="talentInput" type="checkbox"><i></i></label>
+            <label class="switch-row"><span>Ребёнок — реальный семейный план</span><input id="childPlanInput" type="checkbox"><i></i></label>
+            <label class="switch-row"><span>Сохранить гражданство РФ</span><input id="dualInput" type="checkbox" checked><i></i></label>
+            <label class="switch-row"><span>Показывать только verified</span><input id="verifiedInput" type="checkbox"><i></i></label>
+          </fieldset>
+
+          <details class="weights-details">
+            <summary>Тонкая настройка весов <span>+</span></summary>
+            <div class="weight-list">
+              <label><span>Безопасность</span><input type="range" min="0" max="10" value="9" data-weight="safety"><output>9</output></label>
+              <label><span>Стоимость</span><input type="range" min="0" max="10" value="8" data-weight="cost"><output>8</output></label>
+              <label><span>Инфраструктура</span><input type="range" min="0" max="10" value="8" data-weight="infra"><output>8</output></label>
+              <label><span>Природа</span><input type="range" min="0" max="10" value="6" data-weight="nature"><output>6</output></label>
+              <label><span>Юридическая ясность</span><input type="range" min="0" max="10" value="10" data-weight="certainty"><output>10</output></label>
+              <label><span>Скорость</span><input type="range" min="0" max="10" value="7" data-weight="speed"><output>7</output></label>
+            </div>
+          </details>
+        </form>
+      </aside>
+
+      <div class="atlas-main">
+        <section class="level-navigator" aria-labelledby="levelTitle">
+          <div class="section-heading compact-heading">
+            <div>
+              <span class="panel-index">OUTCOME / 02</span>
+              <h2 id="levelTitle">Насколько далеко<br>смотрим?</h2>
+            </div>
+            <p>Уровни вложены. На первом видны все доступные входы; дальше остаются только маршруты, которые действительно могут закрепить статус.</p>
+          </div>
+
+          <div class="level-track" role="tablist" aria-label="Уровень маршрута">
+            <button class="level-step active" type="button" role="tab" aria-selected="true" data-level="temporary">
+              <span class="step-number">01</span>
+              <span class="step-line"></span>
+              <strong>Зимовка / попробовать</strong>
+              <small>1–24 месяца без обещания ВНЖ</small>
+              <b>ENTRY</b>
+            </button>
+            <button class="level-step" type="button" role="tab" aria-selected="false" data-level="residence">
+              <span class="step-number">02</span>
+              <span class="step-line"></span>
+              <strong>Закрепиться</strong>
+              <small>ВНЖ, продление, ПМЖ</small>
+              <b>STATUS</b>
+            </button>
+            <button class="level-step" type="button" role="tab" aria-selected="false" data-level="citizenship">
+              <span class="step-number">03</span>
+              <span class="step-line"></span>
+              <strong>Гражданство</strong>
+              <small>clock, супруг, второй паспорт</small>
+              <b>ANCHOR</b>
+            </button>
+          </div>
+          <div class="level-description" id="levelDescription"></div>
+        </section>
+
+        <section class="visa-catalog" id="visaCatalog" aria-labelledby="visaCatalogTitle">
+          <div class="section-heading visa-catalog-heading">
+            <div>
+              <span class="panel-index">VISA TYPES / 03</span>
+              <h2 id="visaCatalogTitle">Не название.<br><em>Основание входа.</em></h2>
+            </div>
+            <p>Тип визы и финальный outcome разделены. Одна talent-виза может быть временной, другая — сразу давать permanent status.</p>
+          </div>
+          <div class="visa-type-grid" id="visaTypeGrid" role="tablist" aria-label="Каталог видов виз"></div>
+          <div class="visa-catalog-focus" id="visaCatalogFocus" aria-live="polite"></div>
+        </section>
+
+        <section class="result-overview" aria-label="Текущий результат">
+          <div class="overview-main">
+            <span>Текущий лидер</span>
+            <strong id="leaderName">—</strong>
+            <small id="leaderReason">Введите координаты — атлас пересчитает маршрут</small>
+          </div>
+          <div class="overview-stat"><span>Уровень жизни</span><strong id="lifestyleSignal">—</strong></div>
+          <div class="overview-stat"><span>Останется от дохода</span><strong id="incomeRemainder">—</strong></div>
+          <div class="overview-stat"><span>Ваша работа</span><strong id="workSignal">—</strong></div>
+          <div class="overview-stat"><span>Сравнить</span><strong id="pinnedCount">0/3</strong></div>
+        </section>
+
+        <section class="shortlist-section" aria-labelledby="shortlistTitle">
+          <div class="section-heading">
+            <div>
+              <span class="panel-index">SHORTLIST / 04</span>
+              <h2 id="shortlistTitle">Три ближайшие<br><em>траектории</em></h2>
+            </div>
+            <p>Красная линия — hard blocker. Жёлтая — маршрут возможен, но перед действием остались непроверенные условия.</p>
+          </div>
+          <div class="shortlist" id="shortlist"></div>
+        </section>
+
+        <section class="explorer-section" aria-labelledby="explorerTitle">
+          <div class="section-heading explorer-heading">
+            <div>
+              <span class="panel-index">WORLD INDEX / 05</span>
+              <h2 id="explorerTitle">Глобальный<br><em>экран</em></h2>
+            </div>
+            <div class="explorer-tools">
+              <label class="search-field"><span>⌕</span><input id="searchInput" type="search" placeholder="Страна, город или маршрут" aria-label="Поиск страны, города или маршрута"></label>
+              <select id="sortInput" aria-label="Сортировка">
+                <option value="score">По совпадению</option>
+                <option value="budget">По бюджету</option>
+                <option value="speed">По скорости</option>
+                <option value="certainty">По проверенности</option>
+                <option value="infra">По инфраструктуре</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="filter-chips" id="segmentFilters" aria-label="Тип маршрута">
+            <button class="filter-chip active" type="button" data-segment="all">Все</button>
+            <button class="filter-chip" type="button" data-segment="remote">Remote / въезд</button>
+            <button class="filter-chip" type="button" data-segment="talent">Talent</button>
+            <button class="filter-chip" type="button" data-segment="education">Учёба</button>
+            <button class="filter-chip" type="button" data-segment="family">Семья</button>
+            <button class="filter-chip" type="button" data-segment="investment">Инвестиции</button>
+          </div>
+          <div class="zone-filter-group">
+            <span>Часть мира</span>
+            <div class="filter-chips zone-chips" id="zoneFilters" aria-label="Часть мира">
+              <button class="filter-chip active" type="button" data-zone="all">Весь мир</button>
+              <button class="filter-chip" type="button" data-zone="asia">Азия</button>
+              <button class="filter-chip" type="button" data-zone="europe">Европа</button>
+              <button class="filter-chip" type="button" data-zone="eurasia">Евразия</button>
+              <button class="filter-chip" type="button" data-zone="americas">Америка</button>
+              <button class="filter-chip" type="button" data-zone="africa-islands">Африка / острова</button>
+              <button class="filter-chip" type="button" data-zone="oceania">Океания</button>
+            </div>
+          </div>
+          <div class="visa-filter-status" id="visaFilterStatus" hidden>
+            <span>Каталог:</span><strong id="visaFilterLabel">—</strong><button type="button" id="clearVisaFilter">снять фильтр ×</button>
+          </div>
+
+          <div class="route-list" id="routeList"></div>
+          <button class="load-more" id="loadMoreButton" type="button">Показать ещё <span>↓</span></button>
+        </section>
+
+        <section class="compare-section" id="compareSection" aria-labelledby="compareTitle">
+          <div class="section-heading">
+            <div>
+              <span class="panel-index">COMPARE / 06</span>
+              <h2 id="compareTitle">Один экран.<br><em>Три маршрута.</em></h2>
+            </div>
+            <p id="compareHint">Закрепите до трёх карточек. Здесь появится сравнение стоимости, статуса, работы и источников.</p>
+          </div>
+          <div class="compare-empty" id="compareEmpty">
+            <div class="empty-compass">⌖</div>
+            <strong>Пока нечего сравнивать</strong>
+            <span>Нажмите «+ сравнить» на карточке маршрута.</span>
+          </div>
+          <div class="compare-table-wrap" id="compareTableWrap" hidden>
+            <table class="compare-table" id="compareTable"></table>
+          </div>
+        </section>
+
+        <section class="coverage-section" aria-labelledby="coverageTitle">
+          <div class="coverage-copy">
+            <span class="panel-index">DATA ROOM / 07</span>
+            <h2 id="coverageTitle">Что уже известно —<br><em>и что ещё нет</em></h2>
+            <p>Атлас специально показывает границы знания. Текущий срез моделирует 35 стран из 57 в screening universe. Наличие карточки не означает рекомендацию; отсутствие — не означает, что страна невозможна.</p>
+            <button class="text-button light" type="button" data-open-method>Открыть методику и очередь обновлений →</button>
+          </div>
+          <div class="coverage-board">
+            <div class="coverage-line"><span>Европа</span><i style="--coverage: 82%"></i><b>глубоко</b></div>
+            <div class="coverage-line"><span>Южная Америка</span><i style="--coverage: 78%"></i><b>глубоко</b></div>
+            <div class="coverage-line"><span>Азия</span><i style="--coverage: 63%"></i><b>phase 1</b></div>
+            <div class="coverage-line"><span>Кавказ / Central Asia</span><i style="--coverage: 58%"></i><b>phase 1</b></div>
+            <div class="coverage-line"><span>Африка / Islands</span><i style="--coverage: 38%"></i><b>очередь</b></div>
+            <div class="coverage-line"><span>Americas / Caribbean</span><i style="--coverage: 52%"></i><b>phase 1</b></div>
+          </div>
+        </section>
+
+        <footer class="site-footer">
+          <div>
+            <strong>Атлас переезда</strong>
+            <span>Derived snapshot · checked_at 2026-07-17</span>
+          </div>
+          <p>Не является юридической, налоговой или инвестиционной консультацией. Перед заявкой, оплатой или переездом проверяйте официальный источник и практику конкретного консульства.</p>
+          <nav>
+            <button class="footer-link" type="button" data-open-method>Методика</button>
+            <a href="https://data.worldbank.org/indicator/SM.POP.TOTL.ZS" target="_blank" rel="noreferrer">World Bank</a>
+            <a href="https://www.henleyglobal.com/passport-index/methodology" target="_blank" rel="noreferrer">Passport methodology</a>
+          </nav>
+        </footer>
+      </div>
+    </section>
+  </main>
+
+  <div class="compare-dock" id="compareDock" aria-live="polite">
+    <span>Сравнение</span>
+    <div id="dockItems"></div>
+    <button type="button" id="goCompareButton">Открыть <b id="dockCount">0</b>/3 ↑</button>
+  </div>
+
+  <div class="drawer-backdrop" id="drawerBackdrop" aria-hidden="true">
+    <aside class="route-drawer" id="routeDrawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+      <button class="drawer-close" id="drawerClose" type="button" aria-label="Закрыть">×</button>
+      <div id="drawerContent"></div>
+    </aside>
+  </div>
+
+  <div class="method-backdrop" id="methodBackdrop" aria-hidden="true">
+    <section class="method-dialog" role="dialog" aria-modal="true" aria-labelledby="methodTitle">
+      <button class="drawer-close" id="methodClose" type="button" aria-label="Закрыть методику">×</button>
+      <span class="panel-index">METHOD / LIVE DATA</span>
+      <h2 id="methodTitle">Не «база ответов».<br><em>Система обновлений.</em></h2>
+      <div class="method-grid">
+        <article><b>01</b><h3>Официальный факт</h3><p>Въезд, income threshold, ВНЖ и гражданство подтверждаются сайтом ведомства или текстом закона.</p></article>
+        <article><b>02</b><h3>Датированный срез</h3><p>У каждой карточки есть checked_at, confidence и неизвестные. Просроченное не скрывается.</p></article>
+        <article><b>03</b><h3>Два слоя стоимости</h3><p>Городской planning range сравнивается и с доходом, и с текущими расходами. Это сигнал для shortlist, не персональная смета.</p></article>
+        <article><b>04</b><h3>Nationality override</h3><p>Россия, Украина и Беларусь используют общие country facts, но разные entry restrictions и consular practice.</p></article>
+        <article><b>05</b><h3>Visa type ≠ outcome</h3><p>Основание входа хранится отдельно от максимального результата: temporary, residence или citizenship.</p></article>
+        <article><b>06</b><h3>Право на работу</h3><p>Удалёнка, местный найм, self-employment и работа руками проверяются отдельно. «Так делают» не означает «это легально».</p></article>
+      </div>
+      <div class="method-links">
+        <a href="https://data.worldbank.org/indicator/SM.POP.TOTL.ZS" target="_blank" rel="noreferrer">Доля мигрантов · World Bank ↗</a>
+        <a href="https://www.henleyglobal.com/passport-index/methodology" target="_blank" rel="noreferrer">Методика паспортного индекса ↗</a>
+      </div>
+    </section>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="../routes/platform-data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
