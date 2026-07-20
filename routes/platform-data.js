@@ -3,9 +3,9 @@
 
   window.ATLAS_DATA = {
     meta: {
-      version: "0.5.0",
-      schemaVersion: 4,
-      checkedAt: "2026-07-17",
+      version: "0.6.0",
+      schemaVersion: 5,
+      checkedAt: "2026-07-20",
       nationality: "RU",
       screeningUniverse: 57,
       legalDisclaimer: "Score сортирует варианты и не является вероятностью выдачи визы, ВНЖ, ПМЖ или гражданства."
@@ -68,6 +68,116 @@
       GD: { zone: "africa-islands", languages: "английский · креольский", languageAccess: "easy", bureaucracy: "moderate", migrantShare: 6.3, migrantYear: 2024, passportTier: 4 },
       KN: { zone: "africa-islands", languages: "английский", languageAccess: "easy", bureaucracy: "moderate", migrantShare: 17.0, migrantYear: 2024, passportTier: 4 },
       NR: { zone: "oceania", languages: "науруанский · английский", languageAccess: "easy", bureaucracy: "moderate", migrantShare: 21.3, migrantYear: 2024, passportTier: 2 }
+    },
+    childEducationProfiles: {
+      GB: {
+        checkedAt: "2026-07-20",
+        confidence: "A",
+        status: "verified",
+        jurisdiction: "United Kingdom · school provision note applies to England",
+        dependent: {
+          status: "route-dependent",
+          routeIds: ["uk-talent"],
+          summary: "В текущем Global Talent route подходящие дети могут податься как dependants и учиться; срок и settlement ребёнка проверяются отдельно.",
+          sourceIds: ["gb-global-talent-dependants"]
+        },
+        student: {
+          status: "restricted",
+          stages: ["kindergarten", "primary", "secondary"],
+          summary: "Child Student: возраст 4–17, только independent school; без settlement и без собственных dependants.",
+          sourceIds: ["gb-child-student"]
+        },
+        guardian: {
+          status: "restricted",
+          stages: ["kindergarten", "primary"],
+          summary: "Parent of a Child Student: один родитель для ребёнка 4–11; родителю нельзя работать или учиться, статус прекращается не позднее 12-летия ребёнка.",
+          sourceIds: ["gb-parent-child-student"]
+        },
+        provision: {
+          nursery: { status: "needs-check", summary: "Child Student начинается с 4 лет; nursery, стоимость и места зависят от статуса семьи и города.", sourceIds: ["gb-child-student"] },
+          kindergarten: { status: "route-dependent", summary: "С 4 лет возможна independent school по Child Student; state-funded school в Англии зависит от допустимого статуса проживания семьи.", sourceIds: ["gb-child-student", "gb-school-admissions"] },
+          primary: { status: "route-dependent", summary: "Independent school возможна по Child Student; доступ к state-funded school в Англии зависит от статуса проживания семьи.", sourceIds: ["gb-child-student", "gb-school-admissions"] },
+          secondary: { status: "route-dependent", summary: "Child Student покрывает independent school до 17 лет; конкретные места, fees и программа проверяются по школе.", sourceIds: ["gb-child-student"] }
+        },
+        sources: [
+          { id: "gb-child-student", label: "GOV.UK — Child Student visa", url: "https://www.gov.uk/child-study-visa", kind: "official" },
+          { id: "gb-parent-child-student", label: "GOV.UK — Parent of a Child Student visa", url: "https://www.gov.uk/parent-of-a-child-at-school-visa", kind: "official" },
+          { id: "gb-global-talent-dependants", label: "GOV.UK — Global Talent: partner and children", url: "https://www.gov.uk/global-talent/your-partner-and-children", kind: "official" },
+          { id: "gb-school-admissions", label: "GOV.UK — School admissions from overseas", url: "https://www.gov.uk/guidance/schools-admissions-applications-from-overseas-children", kind: "official" }
+        ]
+      },
+      DE: {
+        checkedAt: "2026-07-20",
+        confidence: "A",
+        status: "verified",
+        jurisdiction: "Germany · school placement varies by federal state",
+        dependent: {
+          status: "route-dependent",
+          routeIds: ["de-study"],
+          summary: "Несовершеннолетний не состоящий в браке ребёнок может присоединиться к подходящему родителю; после 16 лет действуют дополнительные условия.",
+          sourceIds: ["de-child-reunification"]
+        },
+        student: {
+          status: "restricted",
+          stages: ["secondary"],
+          summary: "Самостоятельный school residence permit по §16f — как правило, с 9 класса и для школы с международной ориентацией либо подходящей негосударственной моделью.",
+          sourceIds: ["de-residence-act"]
+        },
+        guardian: {
+          status: "not-derived",
+          stages: [],
+          summary: "§16f не устанавливает отдельный статус сопровождающего родителя; взрослому нужно собственное основание проживания.",
+          sourceIds: ["de-residence-act"]
+        },
+        provision: {
+          nursery: { status: "verified", summary: "Crèche обычно покрывает возраст до 3 лет; право на childcare возникает с 1 года, но места могут быть дефицитны.", sourceIds: ["de-child-care"] },
+          kindergarten: { status: "verified", summary: "Kindergarten обычно рассчитан примерно на 3–7 лет; доступны bilingual варианты, стоимость и места зависят от города.", sourceIds: ["de-child-care"] },
+          primary: { status: "verified", summary: "Обязательная школа обычно начинается примерно с 6 лет; большинство государственных школ бесплатны, placement зависит от земли и школы.", sourceIds: ["de-school-system"] },
+          secondary: { status: "verified", summary: "Государственная школа обычно бесплатна; private и international schools платные, а правила зависят от федеральной земли.", sourceIds: ["de-school-system"] }
+        },
+        sources: [
+          { id: "de-child-reunification", label: "Make it in Germany — Children joining parents", url: "https://www.make-it-in-germany.com/en/visa-residence/family-reunification/children-join", kind: "official" },
+          { id: "de-residence-act", label: "Federal Ministry of Justice — Residence Act §16f", url: "https://www.gesetze-im-internet.de/englisch_aufenthg/englisch_aufenthg.html", kind: "official" },
+          { id: "de-school-system", label: "Make it in Germany — School system", url: "https://www.make-it-in-germany.com/en/living-in-germany/family-life/school-system", kind: "official" },
+          { id: "de-child-care", label: "Make it in Germany — Child care", url: "https://www.make-it-in-germany.com/en/living-in-germany/family-life/child-care", kind: "official" }
+        ]
+      },
+      PT: {
+        checkedAt: "2026-07-20",
+        confidence: "A",
+        status: "verified",
+        jurisdiction: "Portugal",
+        dependent: {
+          status: "route-dependent",
+          routeIds: ["pt-d8"],
+          summary: "Несовершеннолетний ребёнок может входить в family reunification законно проживающего sponsor; условия проверяются по статусу основного заявителя.",
+          sourceIds: ["pt-family-reunification"]
+        },
+        student: {
+          status: "restricted",
+          stages: ["secondary"],
+          summary: "Самостоятельное основание secondary student подтверждено для возраста 14–21 при зачислении и подтверждённом проживании.",
+          sourceIds: ["pt-secondary-visa", "pt-law-article-92"]
+        },
+        guardian: {
+          status: "not-derived",
+          stages: [],
+          summary: "Общее автоматическое право родителя сопровождать обычного secondary student не подтверждено; взрослому нужен собственный статус или отдельный pre-check.",
+          sourceIds: ["pt-family-reunification"]
+        },
+        provision: {
+          nursery: { status: "needs-check", summary: "Государственный guide отделяет поддержку детей младше 3 лет; формат, стоимость и наличие места нужно проверять по муниципалитету.", sourceIds: ["pt-education-guide"] },
+          kindergarten: { status: "verified", summary: "Formal education доступно с 3 лет; язык, место и private/international вариант проверяются локально.", sourceIds: ["pt-education-guide"] },
+          primary: { status: "verified", summary: "Доступ к образованию подтверждён на национальном уровне; школа, язык и международная программа остаются city-level выбором.", sourceIds: ["pt-education-guide"] },
+          secondary: { status: "verified", summary: "Доступ к secondary education подтверждён; самостоятельный student route — отдельная модель для возраста 14–21.", sourceIds: ["pt-education-guide", "pt-secondary-visa"] }
+        },
+        sources: [
+          { id: "pt-secondary-visa", label: "gov.pt — Residence visa for study", url: "https://www2.gov.pt/pt-PT/servicos/pedir-um-visto-de-residencia-para-estudo-intercambio-de-estudantes-estagio-profissional-ou-voluntariado", kind: "official" },
+          { id: "pt-law-article-92", label: "Diário da República — Lei 23/2007, artigo 92", url: "https://diariodarepublica.pt/dr/legislacao-consolidada/lei/2007-67564445-155706530", kind: "official" },
+          { id: "pt-family-reunification", label: "gov.pt — Family reunification", url: "https://www2.gov.pt/pt/servicos/pedir-um-visto-de-residencia-para-reagrupamento-familiar", kind: "official" },
+          { id: "pt-education-guide", label: "gov.pt — Education in Portugal for migrants", url: "https://www.gov.pt/guias/migrantes-ensino-em-portugal-para-criancas-jovens-e-adultos", kind: "official" }
+        ]
+      }
     },
     citySignals: {
       "TH|Бангкок": { sea: "near", mountains: "none", housing: "hot" },

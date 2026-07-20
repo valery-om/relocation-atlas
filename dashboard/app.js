@@ -4,12 +4,13 @@
   function validateRuntimeData(data) {
     var errors = [];
     if (!data || typeof data !== "object") return ["ATLAS_DATA отсутствует"];
-    if (!data.meta || data.meta.schemaVersion !== 4) errors.push("Неподдерживаемая версия схемы");
+    if (!data.meta || data.meta.schemaVersion !== 5) errors.push("Неподдерживаемая версия схемы");
     if (!Array.isArray(data.visaTypes) || !data.visaTypes.length) errors.push("Нет справочника visaTypes");
     if (!Array.isArray(data.entries) || !data.entries.length) errors.push("Нет маршрутов");
     if (!data.countryProfiles || typeof data.countryProfiles !== "object") errors.push("Нет countryProfiles");
     if (!data.citySignals || typeof data.citySignals !== "object") errors.push("Нет citySignals");
     if (!data.workProfiles || typeof data.workProfiles !== "object") errors.push("Нет workProfiles");
+    if (!data.childEducationProfiles || typeof data.childEducationProfiles !== "object") errors.push("Нет childEducationProfiles");
     var typeIds = new Set((data.visaTypes || []).map(function (type) { return type.id; }));
     if (typeIds.size !== (data.visaTypes || []).length) errors.push("Повторяющийся visaType id");
     var routeIds = new Set();
@@ -29,6 +30,7 @@
   }
 
   var DATA = window.ATLAS_DATA;
+  var I18N = window.ATLAS_I18N;
   var DATA_ERRORS = validateRuntimeData(DATA);
   if (DATA_ERRORS.length) {
     document.body.innerHTML = '<main class="fatal-error"><h1>Данные атласа не прошли проверку</h1><p>' + DATA_ERRORS.join(" · ") + '</p><p>Запустите <code>node scripts/validate-platform-data.js</code>.</p></main>';
@@ -36,15 +38,18 @@
   }
 
   var LEVEL_RANK = { temporary: 1, residence: 2, citizenship: 3 };
-  var APP_VERSION = "0.8.0";
-  var PLAN_VERSION = 2;
-  var PROFILE_KEY = "relocation-atlas-profile-v4";
+  var APP_VERSION = "0.11.0";
+  var PLAN_VERSION = 4;
+  var PROFILE_KEY = "relocation-atlas-profile-v5";
   var PLAN_BOARD_KEY = "relocation-atlas-plan-board-v1";
   var SCENARIO_KEY = "relocation-atlas-scenario-v1";
+  var FINALISTS_KEY = "relocation-atlas-finalists-v1";
   var PLAN_BOARD_VERSION = 1;
   var SCENARIO_VERSION = 1;
+  var FINALISTS_VERSION = 1;
   var PLAN_CHECK_STATUSES = ["todo", "in-progress", "verified"];
-  var LEGACY_PROFILE_KEYS = ["relocation-atlas-profile-v3", "relocation-atlas-profile-v2"];
+  var FINALIST_ROLES = ["unassigned", "anchor", "fallback", "research"];
+  var LEGACY_PROFILE_KEYS = ["relocation-atlas-profile-v4", "relocation-atlas-profile-v3", "relocation-atlas-profile-v2"];
   var VISA_TYPES_BY_ID = DATA.visaTypes.reduce(function (map, type) { map[type.id] = type; return map; }, {});
   var PAGE_SIZE = 9;
   var DEFAULT_PROFILE = {
@@ -52,6 +57,9 @@
     level: "temporary",
     adults: 2,
     children: 0,
+    childEducationStage: "none",
+    childEducationFormat: "either",
+    childEducationVisa: false,
     income: 4000,
     currentSpend: 2200,
     budget: 2500,
@@ -81,9 +89,39 @@
     pinned: []
   };
 
+  var JUDGE_DEMO_PROFILE = Object.assign(clonePlain(DEFAULT_PROFILE), {
+    level: "residence",
+    adults: 2,
+    children: 1,
+    childEducationStage: "primary",
+    childEducationFormat: "international",
+    childEducationVisa: true,
+    income: 9000,
+    currentSpend: 4000,
+    budget: 7000,
+    savings: 60000,
+    investment: 0,
+    zone: "europe",
+    climate: "temperate",
+    workMode: "remote",
+    skillSector: "digital",
+    horizon: 10,
+    presence: "can-stay",
+    study: true,
+    talent: true,
+    childPlan: false,
+    keepDual: true,
+    pinned: ["pt-d8", "de-study", "uk-talent"]
+  });
+
+  function clonePlain(value) {
+    return JSON.parse(JSON.stringify(value));
+  }
+
   var state = loadProfile();
   var planBoardState = loadPlanBoard();
   var scenarioState = loadScenario();
+  var finalistState = loadFinalists();
   var computed = [];
   var scenarioResult = null;
   var visibleLimit = PAGE_SIZE;
@@ -95,6 +133,7 @@
   var $ = function (selector, root) { return (root || document).querySelector(selector); };
   var $$ = function (selector, root) { return Array.prototype.slice.call((root || document).querySelectorAll(selector)); };
   var clamp = function (value, min, max) { return Math.max(min, Math.min(max, value)); };
+  var uiText = function (value) { return I18N ? I18N.translate(value) : value; };
 
   function escapeHtml(value) {
     return String(value == null ? "" : value).replace(/[&<>"']/g, function (character) {
@@ -119,6 +158,11 @@
   function formatBudget(range, factor) {
     if (!range || range.length < 2) return "н/д";
     return "$" + Math.round(range[0] * factor / 100) * 100 + "–" + Math.round(range[1] * factor / 100) * 100;
+  }
+
+  function formatMoneyRange(range) {
+    if (!range || range.length < 2) return "н/д";
+    return formatExactMoney(range[0]) + "–" + formatExactMoney(range[1]);
   }
 
   function adjustedRange(range) {
@@ -172,6 +216,60 @@
       localStorage.removeItem(PLAN_BOARD_KEY);
     } catch (error) {
       showToast("Не удалось очистить статусы плана");
+    }
+  }
+
+  function emptyFinalistState() {
+    return { version: FINALISTS_VERSION, choices: {} };
+  }
+
+  function finalistRoute(routeId) {
+    return DATA.entries.find(function (entry) { return entry.id === routeId; });
+  }
+
+  function normalizeFinalistState(value) {
+    var clean = emptyFinalistState();
+    var claimedRoles = { anchor: false, fallback: false };
+    if (!value || value.version !== FINALISTS_VERSION || !value.choices || typeof value.choices !== "object" || Array.isArray(value.choices)) return clean;
+    DATA.entries.forEach(function (route) {
+      var choice = value.choices[route.id];
+      if (!choice || typeof choice !== "object" || Array.isArray(choice)) return;
+      var role = FINALIST_ROLES.includes(choice.role) ? choice.role : "unassigned";
+      if ((role === "anchor" || role === "fallback") && claimedRoles[role]) role = "unassigned";
+      if (role === "anchor" || role === "fallback") claimedRoles[role] = true;
+      var cityName = typeof choice.cityName === "string" && route.cities.some(function (city) { return city.name === choice.cityName; }) ? choice.cityName : null;
+      if (role === "unassigned" && !cityName) return;
+      clean.choices[route.id] = {
+        role: role,
+        cityName: cityName,
+        updatedAt: validIsoDate(choice.updatedAt) ? choice.updatedAt : null
+      };
+    });
+    return clean;
+  }
+
+  function loadFinalists() {
+    try {
+      return normalizeFinalistState(JSON.parse(localStorage.getItem(FINALISTS_KEY) || "null"));
+    } catch (error) {
+      return emptyFinalistState();
+    }
+  }
+
+  function saveFinalists() {
+    try {
+      localStorage.setItem(FINALISTS_KEY, JSON.stringify(finalistState));
+    } catch (error) {
+      showToast("Браузер не сохранил выбор финалистов");
+    }
+  }
+
+  function clearFinalists() {
+    finalistState = emptyFinalistState();
+    try {
+      localStorage.removeItem(FINALISTS_KEY);
+    } catch (error) {
+      showToast("Не удалось очистить выбор финалистов");
     }
   }
 
@@ -287,7 +385,7 @@
     Object.keys(DEFAULT_PROFILE.weights).forEach(function (key) {
       profile.weights[key] = boundedNumber(profile.weights[key], 0, 10, DEFAULT_PROFILE.weights[key], true);
     });
-    ["study", "talent", "childPlan", "keepDual", "verifiedOnly"].forEach(function (key) {
+    ["study", "talent", "childPlan", "childEducationVisa", "keepDual", "verifiedOnly"].forEach(function (key) {
       if (typeof profile[key] !== "boolean") profile[key] = DEFAULT_PROFILE[key];
     });
     if (!DATA.nationalities.some(function (item) { return item.code === profile.nationality && item.status === "active"; })) profile.nationality = "RU";
@@ -295,6 +393,8 @@
     if (!["any", "warm", "temperate", "cool"].includes(profile.climate)) profile.climate = "any";
     if (!["any", "direct", "near"].includes(profile.seaPreference)) profile.seaPreference = "any";
     if (!["any", "direct", "near"].includes(profile.mountainPreference)) profile.mountainPreference = "any";
+    if (!["none", "nursery", "kindergarten", "primary", "secondary"].includes(profile.childEducationStage)) profile.childEducationStage = "none";
+    if (!["either", "local", "international"].includes(profile.childEducationFormat)) profile.childEducationFormat = "either";
     if (!["wintering", "trial", "anchor"].includes(profile.stayStyle)) profile.stayStyle = "wintering";
     if (!["unsure", "can-stay", "need-travel"].includes(profile.presence)) profile.presence = "unsure";
     if (!["remote", "local-job", "self-employed", "hands-on", "not-working"].includes(profile.workMode)) profile.workMode = "remote";
@@ -363,6 +463,25 @@
 
   function childPlanLabel(value) {
     return value ? "Да, реальный план" : "Нет";
+  }
+
+  function childEducationStageLabel(value) {
+    return { none: "не выбран", nursery: "ясли · до 3 лет", kindergarten: "детский сад · 3–6 лет", primary: "начальная школа", secondary: "средняя / старшая школа" }[value] || "не выбран";
+  }
+
+  function childEducationFormatLabel(value) {
+    return { either: "любой подходящий", local: "местная школа / сад", international: "international / bilingual" }[value] || "любой подходящий";
+  }
+
+  function childEducationStatusLabel(value) {
+    return { verified: "официальный слой", restricted: "ограниченный route", "route-dependent": "зависит от статуса", "needs-check": "не исследовано", "not-derived": "не даёт статус родителю", "not-selected": "не учтено" }[value] || "не исследовано";
+  }
+
+  function childEducationStatusClass(value) {
+    if (value === "verified") return "education-verified";
+    if (value === "restricted" || value === "route-dependent") return "education-conditional";
+    if (value === "not-derived") return "education-danger";
+    return "education-unknown";
   }
 
   function skillSectorLabel(sector) {
@@ -539,6 +658,52 @@
     return entry.outcome === "temporary" || entry.visaType === "nomad" || entry.visaType === "visitor" ? 100 : 72;
   }
 
+  function childEducationAssessment(entry) {
+    var active = state.childEducationStage !== "none";
+    var profile = DATA.childEducationProfiles && DATA.childEducationProfiles[entry.code];
+    var stage = state.childEducationStage;
+    var provision = active && profile && profile.provision ? profile.provision[stage] : null;
+    var studentApplies = Boolean(active && profile && profile.student && profile.student.stages.includes(stage));
+    var unknowns = [];
+
+    if (active && !profile) {
+      unknowns.push("Образование ребёнка: страна ещё не исследована по dependent-path, школьной визе, сопровождающему родителю и " + childEducationStageLabel(stage));
+    }
+    if (active && provision && (provision.status === "needs-check" || provision.status === "route-dependent")) {
+      unknowns.push("Образование ребёнка · " + childEducationStageLabel(stage) + ": " + provision.summary);
+    }
+    if (active && state.childEducationFormat === "international") {
+      unknowns.push("International / bilingual образование: стоимость, места и конкретная программа не проверены по городу");
+    }
+    if (active && state.childEducationVisa && profile && !studentApplies) {
+      unknowns.push("Отдельное школьное основание не подтверждено для этапа «" + childEducationStageLabel(stage) + "»; сначала проверяйте dependent-path по статусу родителя");
+    }
+    if (active && state.childEducationVisa && profile && profile.guardian.status === "not-derived") {
+      unknowns.push("Сопровождающий родитель: школьный статус ребёнка не создаёт подтверждённого статуса взрослому; требуется собственное основание");
+    }
+
+    return {
+      active: active,
+      stage: stage,
+      stageLabel: childEducationStageLabel(stage),
+      format: state.childEducationFormat,
+      formatLabel: childEducationFormatLabel(state.childEducationFormat),
+      schoolAsBasis: state.childEducationVisa,
+      profile: profile || null,
+      provision: provision || null,
+      studentApplies: studentApplies,
+      status: !active ? "not-selected" : !profile ? "needs-check" : state.childEducationVisa && !studentApplies ? "restricted" : provision ? provision.status : "needs-check",
+      headline: !active
+        ? "Этап образования не выбран в профиле."
+        : !profile
+          ? "Для страны ещё нет официального child-education среза."
+          : state.childEducationVisa && !studentApplies
+            ? "Самостоятельный school route для выбранного этапа не подтверждён."
+            : provision.summary,
+      unknowns: unknowns
+    };
+  }
+
   function evaluate(entry) {
     var blockers = [];
     var warnings = [];
@@ -550,6 +715,7 @@
     var requiredInvestment = Number(entry.investmentMin || 0) + Number(entry.applyCost || 0);
     var segment = segmentOf(entry);
     var work = workAssessment(entry);
+    var childEducation = childEducationAssessment(entry);
     var lifestyle = lifestyleResult(cityMid);
     var profile = countryProfile(entry);
     var signal = city ? citySignal(entry, city) : null;
@@ -624,6 +790,7 @@
       citySignal: signal,
       countryProfile: profile,
       workAssessment: work,
+      childEducation: childEducation,
       lifestyle: lifestyle,
       budgetFits: !cityLow || Number(state.budget || 0) >= cityLow,
       availabilityState: availability,
@@ -702,6 +869,9 @@
       level: profile.level,
       adults: profile.adults,
       children: profile.children,
+      childEducationStage: profile.childEducationStage,
+      childEducationFormat: profile.childEducationFormat,
+      childEducationVisa: profile.childEducationVisa,
       income: profile.income,
       currentSpend: profile.currentSpend,
       budget: profile.budget,
@@ -865,6 +1035,28 @@
     renderCalculationState();
     renderMyPlan();
     renderDock();
+    if (I18N) I18N.apply(document.documentElement);
+  }
+
+  function loadJudgeDemo() {
+    var customProfile = decisionProfileSignature(state) !== decisionProfileSignature(DEFAULT_PROFILE) || state.pinned.length > 0;
+    if (customProfile && !window.confirm(uiText("Заменить текущие локальные ответы анонимным demo profile? Сначала скачайте профиль, если хотите его сохранить."))) return;
+    state = clone(JUDGE_DEMO_PROFILE);
+    clearPlanBoard();
+    clearScenario();
+    finalistState = {
+      version: FINALISTS_VERSION,
+      choices: {
+        "pt-d8": { role: "anchor", cityName: "Лиссабон", updatedAt: null },
+        "de-study": { role: "fallback", cityName: "Берлин", updatedAt: null },
+        "uk-talent": { role: "research", cityName: "Лондон", updatedAt: null }
+      }
+    };
+    saveFinalists();
+    visibleLimit = PAGE_SIZE;
+    syncForm();
+    calculateRoutes(true);
+    showToast("Анонимный demo profile загружен");
   }
 
   function renderTopMeta() {
@@ -961,12 +1153,15 @@
       return;
     }
     $("#shortlist").innerHTML = list.map(function (entry, index) {
-      var className = entry.blockers.length ? " blocked" : entry.status !== "verified" || entry.warnings.length ? " partial" : "";
+      var className = entry.blockers.length ? " blocked" : entry.status !== "verified" || entry.warnings.length || entry.childEducation.active && entry.childEducation.status !== "verified" ? " partial" : "";
       var pinned = state.pinned.indexOf(entry.id) >= 0;
+      var educationSignal = entry.childEducation.active
+        ? '<div class="short-education"><span>Ребёнок · ' + escapeHtml(entry.childEducation.stageLabel) + '</span><strong class="' + childEducationStatusClass(entry.childEducation.status) + '">' + escapeHtml(childEducationStatusLabel(entry.childEducation.status)) + '</strong></div>'
+        : "";
       return '<article class="short-card' + className + '">' +
         '<div class="short-card-top"><span class="flag">' + entry.flag + '</span><span class="score-ring">' + entry.score + '<small>fit</small></span></div>' +
         '<div class="short-card-main"><span class="panel-index">' + escapeHtml(trajectoryRole(entry, index)) + '</span><h3>' + escapeHtml(entry.country) + '</h3><div class="route-name">' + escapeHtml(entry.route) + ' · ' + escapeHtml(outcomeLabel(entry.outcome)) + '</div>' +
-        '<div class="short-signals"><span class="' + lifestyleClass(entry.lifestyle) + '">' + escapeHtml(lifestyleLabel(entry.lifestyle)) + ' ' + signedPercent(entry.lifestyle.delta) + '</span><span class="' + workStatusClass(entry.workAssessment.status) + '">' + escapeHtml(workStatusLabel(entry.workAssessment.status)) + '</span></div>' +
+        '<div class="short-signals"><span class="' + lifestyleClass(entry.lifestyle) + '">' + escapeHtml(lifestyleLabel(entry.lifestyle)) + ' ' + signedPercent(entry.lifestyle.delta) + '</span><span class="' + workStatusClass(entry.workAssessment.status) + '">' + escapeHtml(workStatusLabel(entry.workAssessment.status)) + '</span></div>' + educationSignal +
         '<div class="short-explanation"><p><b>Почему подходит</b>' + escapeHtml(mainReason(entry)) + '</p><p class="short-limit"><b>' + (entry.blockers.length ? "Hard blocker" : "Проверить") + '</b>' + escapeHtml(mainConstraint(entry)) + '</p></div>' +
         '<div class="short-meta"><span>grade ' + escapeHtml(entry.confidence) + '</span><span>checked ' + escapeHtml(entry.checkedAt) + '</span></div></div>' +
         '<div class="short-card-bottom"><button class="short-compare' + (pinned ? " pinned" : "") + '" type="button" data-pin="' + entry.id + '" aria-pressed="' + (pinned ? "true" : "false") + '">' + (pinned ? "✓ В сравнении" : "+ Сравнить") + '</button><button class="short-open" type="button" data-open="' + entry.id + '" aria-label="Подробнее о ' + escapeHtml(entry.country) + '">↗</button></div>' +
@@ -1217,6 +1412,7 @@
       comparisonRow("Останется от дохода", entries.map(function (entry) { return '<strong>' + formatMoney(entry.lifestyle.remaining) + '/мес.</strong><br><small>до налогов и визовых расходов</small>'; })),
       comparisonRow("Доход / funds", entries.map(function (entry) { return 'income ' + formatMoney(entry.incomeMin) + '<br>funds ' + formatMoney(entry.fundsMin); })),
       comparisonRow("Ваш формат работы", entries.map(function (entry) { return '<strong class="' + workStatusClass(entry.workAssessment.status) + '">' + escapeHtml(workStatusLabel(entry.workAssessment.status)) + '</strong><br><small>' + escapeHtml(entry.workAssessment.note) + '</small>'; })),
+      state.childEducationStage !== "none" ? comparisonRow("Ребёнок и образование", entries.map(function (entry) { return '<strong class="' + childEducationStatusClass(entry.childEducation.status) + '">' + escapeHtml(childEducationStatusLabel(entry.childEducation.status)) + '</strong><br><small>' + escapeHtml(entry.childEducation.headline) + '</small>'; })) : "",
       comparisonRow("Море / горы / аренда", entries.map(function (entry) { return entry.citySignal ? escapeHtml(geographyLabel(entry.citySignal.sea, "sea") + ' · ' + geographyLabel(entry.citySignal.mountains, "mountains")) + '<br><small>' + escapeHtml(housingLabel(entry.citySignal.housing)) + '</small>' : "н/д"; })),
       comparisonRow("Язык / бюрократия", entries.map(function (entry) { return escapeHtml(entry.countryProfile.languages) + '<br><small>' + escapeHtml(languageAccessLabel(entry.countryProfile.languageAccess) + ' · ' + bureaucracyLabel(entry.countryProfile.bureaucracy)) + '</small>'; })),
       comparisonRow("Мигранты", entries.map(function (entry) { return escapeHtml(migrantShareLabel(entry.countryProfile)) + '<br><small>World Bank / UN, ' + escapeHtml(entry.countryProfile.migrantYear || "n/a") + '</small>'; })),
@@ -1232,6 +1428,167 @@
     return state.pinned.map(function (id) {
       return computed.find(function (entry) { return entry.id === id; });
     }).filter(Boolean);
+  }
+
+  function finalistRoleLabel(role) {
+    return { anchor: "Основной маршрут", fallback: "Запасной маршрут", research: "Продолжить исследование", unassigned: "Роль не выбрана" }[role] || "Роль не выбрана";
+  }
+
+  function finalistChoice(routeId) {
+    var saved = finalistState.choices[routeId] || {};
+    return {
+      role: FINALIST_ROLES.includes(saved.role) ? saved.role : "unassigned",
+      cityName: typeof saved.cityName === "string" ? saved.cityName : null,
+      updatedAt: validIsoDate(saved.updatedAt) ? saved.updatedAt : null
+    };
+  }
+
+  function selectedFinalistCity(entry) {
+    var cityName = finalistChoice(entry.id).cityName;
+    return cityName ? entry.cities.find(function (city) { return city.name === cityName; }) || null : null;
+  }
+
+  function finalistGate(id, label, status, detail) {
+    return { id: id, label: label, status: status, detail: detail };
+  }
+
+  function finalistReadiness(entry, city) {
+    var unknowns = entry.warnings.concat(entry.childEducation.unknowns);
+    var legalBlockers = entry.blockers.filter(function (item) {
+      return !/^(Бюджет жизни|Доход не покрывает среднюю city basket|Заработок:)/.test(item);
+    });
+    var legalGate = legalBlockers.length
+      ? finalistGate("eligibility", "Право / eligibility", "stop", legalBlockers.length + " hard blocker")
+      : entry.status !== "verified" || entry.availabilityState.status === "needs-check"
+        ? finalistGate("eligibility", "Право / eligibility", "caution", "Нет hard blocker, но правило требует перепроверки")
+        : finalistGate("eligibility", "Право / eligibility", "clear", "Hard blocker не найден в текущем профиле");
+
+    var monthlyRange = city ? adjustedRange(city.budget) : null;
+    var budget = Number(state.budget || 0);
+    var budgetGate = !monthlyRange
+      ? finalistGate("budget", "Бюджет жизни", "unknown", "Сначала выберите город")
+      : budget < monthlyRange[0]
+        ? finalistGate("budget", "Бюджет жизни", "stop", "Ниже нижней границы " + formatExactMoney(monthlyRange[0]) + "/мес.")
+        : budget < monthlyRange[1]
+          ? finalistGate("budget", "Бюджет жизни", "caution", "Покрывает только нижнюю часть диапазона")
+          : finalistGate("budget", "Бюджет жизни", "clear", "Весь planning range укладывается в budget");
+
+    var workStatus = entry.workAssessment.status;
+    var workGate = workStatus === "legal"
+      ? finalistGate("work", "Работа", "clear", workStatusLabel(workStatus))
+      : workStatus === "high-risk" || workStatus === "not-authorized"
+        ? finalistGate("work", "Работа", "stop", workStatusLabel(workStatus))
+        : finalistGate("work", "Работа", "caution", workStatusLabel(workStatus));
+
+    var familyGate = !entry.childEducation.active
+      ? finalistGate("family", "Ребёнок / образование", "not-applicable", "Этап образования не выбран")
+      : entry.childEducation.status === "verified"
+        ? finalistGate("family", "Ребёнок / образование", "clear", entry.childEducation.headline)
+        : finalistGate("family", "Ребёнок / образование", "caution", entry.childEducation.headline);
+
+    var qualityGate = entry.status === "verified" && entry.confidence === "A"
+      ? finalistGate("data", "Качество данных", "clear", "confidence A · checked " + entry.checkedAt)
+      : finalistGate("data", "Качество данных", "caution", "confidence " + entry.confidence + " · " + entry.status + " · checked " + entry.checkedAt);
+
+    return {
+      kind: "separate-gates",
+      disclaimer: "Readiness не усредняется и не является вероятностью одобрения.",
+      gates: [legalGate, budgetGate, workGate, familyGate, qualityGate],
+      blockerCount: entry.blockers.length,
+      unknownCount: unknowns.length
+    };
+  }
+
+  function finalistRoleSummary(entries, role, label) {
+    var entry = entries.find(function (item) { return finalistChoice(item.id).role === role; });
+    var city = entry ? selectedFinalistCity(entry) : null;
+    return '<article data-role="' + role + '"><span>' + escapeHtml(label) + '</span><strong>' + (entry ? escapeHtml(entry.country) : "Не выбран") + '</strong><small>' + (entry ? escapeHtml(entry.route) + (city ? " · " + escapeHtml(city.name) : " · выберите город") : "Назначьте роль в карточке") + '</small></article>';
+  }
+
+  function renderFinalistRound(entries) {
+    var enough = entries.length >= 2;
+    var status = $("#finalistDecisionStatus");
+    $("#finalistEmpty").hidden = enough;
+    $("#finalistWorkspace").hidden = !enough;
+    if (!enough) {
+      status.dataset.state = "empty";
+      status.textContent = "Нужны 2–3 маршрута";
+      $("#finalistRoleSummary").innerHTML = "";
+      $("#finalistCards").innerHTML = "";
+      return;
+    }
+
+    var anchor = entries.find(function (entry) { return finalistChoice(entry.id).role === "anchor"; });
+    var fallback = entries.find(function (entry) { return finalistChoice(entry.id).role === "fallback"; });
+    status.dataset.state = anchor && fallback ? "ready" : "partial";
+    status.textContent = anchor && fallback ? "Основной + запасной зафиксированы" : "Назначьте основной и запасной";
+
+    var researching = entries.filter(function (entry) { return finalistChoice(entry.id).role === "research"; });
+    $("#finalistRoleSummary").innerHTML = finalistRoleSummary(entries, "anchor", "01 · Основной") +
+      finalistRoleSummary(entries, "fallback", "02 · Запасной") +
+      '<article data-role="research"><span>03 · Исследовать</span><strong>' + (researching.length ? researching.map(function (entry) { return escapeHtml(entry.country); }).join(" · ") : "Не выбрано") + '</strong><small>Не влияет на порядок и сравнительный fit</small></article>';
+
+    $("#finalistCards").innerHTML = entries.map(function (entry, index) {
+      var choice = finalistChoice(entry.id);
+      var city = selectedFinalistCity(entry);
+      var readiness = finalistReadiness(entry, city);
+      var monthlyRange = city ? adjustedRange(city.budget) : null;
+      var annualRange = monthlyRange ? monthlyRange.map(function (value) { return value * 12; }) : null;
+      var roleOptions = [
+        ["unassigned", "Роль не выбрана"],
+        ["anchor", "Основной маршрут"],
+        ["fallback", "Запасной маршрут"],
+        ["research", "Продолжить исследование"]
+      ].map(function (option) {
+        return '<option value="' + option[0] + '"' + (choice.role === option[0] ? " selected" : "") + '>' + option[1] + '</option>';
+      }).join("");
+      var cityOptions = '<option value="">Выберите город</option>' + entry.cities.map(function (item) {
+        return '<option value="' + escapeHtml(item.name) + '"' + (choice.cityName === item.name ? " selected" : "") + '>' + escapeHtml(item.name) + '</option>';
+      }).join("");
+      var gates = readiness.gates.map(function (gate) {
+        return '<li data-status="' + gate.status + '"><span>' + escapeHtml(gate.label) + '</span><strong>' + escapeHtml(gate.detail) + '</strong></li>';
+      }).join("");
+      return '<article class="finalist-card" data-role="' + choice.role + '">' +
+        '<header><div><span>' + String(index + 1).padStart(2, "0") + ' · ' + entry.flag + ' · ' + escapeHtml(outcomeLabel(entry.outcome)) + '</span><h4>' + escapeHtml(entry.country) + '</h4><p>' + escapeHtml(entry.route) + '</p></div><b>' + entry.score + '<small>/100 fit<br>не approval</small></b></header>' +
+        '<div class="finalist-controls"><label><span>Роль в решении</span><select data-finalist-role="' + entry.id + '" aria-label="Роль маршрута ' + escapeHtml(entry.country) + '">' + roleOptions + '</select></label><label><span>Город для планирования</span><select data-finalist-city="' + entry.id + '" aria-label="Город для маршрута ' + escapeHtml(entry.country) + '">' + cityOptions + '</select></label></div>' +
+        '<div class="finalist-cost"><div><span>Месяц · семья</span><strong>' + formatMoneyRange(monthlyRange) + '</strong></div><div><span>Первый год · база</span><strong>' + formatMoneyRange(annualRange) + '</strong></div><div><span>Route application</span><strong>' + (entry.applyCost ? "≈" + formatExactMoney(entry.applyCost) : "н/д") + '</strong></div></div>' +
+        '<ul class="finalist-gates" aria-label="Проверки готовности">' + gates + '</ul>' +
+        '<footer><span>' + readiness.blockerCount + ' blockers · ' + readiness.unknownCount + ' unknowns · checked ' + escapeHtml(entry.checkedAt) + '</span><button type="button" data-finalist-open="' + entry.id + '">Детали и источники <b>↗</b></button></footer>' +
+      '</article>';
+    }).join("");
+  }
+
+  function setFinalistRole(routeId, role) {
+    if (!FINALIST_ROLES.includes(role) || !comparisonEntries().some(function (entry) { return entry.id === routeId; })) return;
+    var now = new Date().toISOString();
+    if (role === "anchor" || role === "fallback") Object.keys(finalistState.choices).forEach(function (id) {
+      if (id !== routeId && finalistState.choices[id].role === role) {
+        finalistState.choices[id].role = "unassigned";
+        finalistState.choices[id].updatedAt = now;
+        if (!finalistState.choices[id].cityName) delete finalistState.choices[id];
+      }
+    });
+    var choice = finalistChoice(routeId);
+    choice.role = role;
+    choice.updatedAt = now;
+    if (choice.role === "unassigned" && !choice.cityName) delete finalistState.choices[routeId];
+    else finalistState.choices[routeId] = choice;
+    saveFinalists();
+    renderMyPlan();
+    showToast(finalistRoleLabel(role));
+  }
+
+  function setFinalistCity(routeId, cityName) {
+    var entry = comparisonEntries().find(function (item) { return item.id === routeId; });
+    if (!entry || cityName && !entry.cities.some(function (city) { return city.name === cityName; })) return;
+    var choice = finalistChoice(routeId);
+    choice.cityName = cityName || null;
+    choice.updatedAt = new Date().toISOString();
+    if (choice.role === "unassigned" && !choice.cityName) delete finalistState.choices[routeId];
+    else finalistState.choices[routeId] = choice;
+    saveFinalists();
+    renderMyPlan();
+    showToast(cityName ? "Город: " + cityName : "Город не выбран");
   }
 
   function planRole(entry, trajectories) {
@@ -1253,7 +1610,21 @@
       seen.add(url);
       sources.push({ label: "Право на работу · official " + (index + 1), url: url, kind: "official", checkedAt: workProfile.checkedAt });
     });
+    if (entry.childEducation && entry.childEducation.active && entry.childEducation.profile) {
+      entry.childEducation.profile.sources.forEach(function (source) {
+        if (seen.has(source.url)) return;
+        seen.add(source.url);
+        sources.push({ label: source.label, url: source.url, kind: "official", checkedAt: entry.childEducation.profile.checkedAt });
+      });
+    }
     return sources;
+  }
+
+  function childEducationPlanSources(entry) {
+    if (!entry.childEducation || !entry.childEducation.profile) return [];
+    return entry.childEducation.profile.sources.map(function (source) {
+      return { label: source.label, url: source.url, kind: "official", checkedAt: entry.childEducation.profile.checkedAt };
+    });
   }
 
   function planChecklistRoutes(trajectories, comparison) {
@@ -1272,9 +1643,10 @@
     return type === "hard-blocker" ? "Hard blocker" : "Неизвестное";
   }
 
-  function planChecklistItem(entry, type, label) {
+  function planChecklistItem(entry, type, label, context) {
     var id = checklistItemId(entry.id, type, label);
     var saved = planBoardState.items[id];
+    context = context || {};
     return {
       id: id,
       routeId: entry.id,
@@ -1286,10 +1658,10 @@
       status: saved ? saved.status : "todo",
       updatedAt: saved ? saved.updatedAt : null,
       dataQuality: {
-        confidence: entry.confidence,
-        checkedAt: entry.checkedAt
+        confidence: context.confidence || entry.confidence,
+        checkedAt: context.checkedAt || entry.checkedAt
       },
-      officialSources: planSources(entry)
+      officialSources: context.officialSources || planSources(entry)
     };
   }
 
@@ -1325,6 +1697,18 @@
           checklist.push(check);
         }
       });
+      entry.childEducation.unknowns.forEach(function (item) {
+        var educationProfile = entry.childEducation.profile;
+        var check = planChecklistItem(entry, "unknown", item, {
+          confidence: educationProfile ? educationProfile.confidence : "C",
+          checkedAt: educationProfile ? educationProfile.checkedAt : DATA.meta.checkedAt,
+          officialSources: childEducationPlanSources(entry)
+        });
+        if (!seen.has(check.id)) {
+          seen.add(check.id);
+          checklist.push(check);
+        }
+      });
     });
     return sortPlanChecklist(checklist);
   }
@@ -1355,8 +1739,11 @@
     };
   }
 
-  function planRouteSnapshot(entry, role) {
-    var city = entry.bestCity;
+  function planRouteSnapshot(entry, role, cityOverride) {
+    var city = cityOverride === undefined ? entry.bestCity : cityOverride;
+    var cityRange = city ? adjustedRange(city.budget) : null;
+    var cityMid = cityRange ? (cityRange[0] + cityRange[1]) / 2 : 0;
+    var lifestyle = cityOverride === undefined ? entry.lifestyle : lifestyleResult(cityMid);
     return {
       id: entry.id,
       role: role,
@@ -1372,15 +1759,15 @@
       },
       reason: mainReason(entry),
       blockers: clone(entry.blockers),
-      unknowns: clone(entry.warnings),
+      unknowns: clone(entry.warnings.concat(entry.childEducation.unknowns)),
       budget: {
         currency: "USD",
         kind: "planning-range",
         city: city ? city.name : null,
-        monthlyHouseholdRange: city ? adjustedRange(city.budget) : null,
+        monthlyHouseholdRange: cityRange,
         rentHouseholdRange: city ? adjustedRange(city.rent) : null,
-        currentSpendDeltaPercent: entry.lifestyle.delta == null ? null : Math.round(entry.lifestyle.delta * 100),
-        remainingIncomeMonthly: Math.round(entry.lifestyle.remaining)
+        currentSpendDeltaPercent: lifestyle.delta == null ? null : Math.round(lifestyle.delta * 100),
+        remainingIncomeMonthly: Math.round(lifestyle.remaining)
       },
       work: {
         requestedMode: state.workMode,
@@ -1389,7 +1776,26 @@
         statusLabel: workStatusLabel(entry.workAssessment.status),
         note: entry.workAssessment.note
       },
-      family: { spousePolicy: entry.spouse },
+      family: {
+        spousePolicy: entry.spouse,
+        childEducation: {
+          stage: entry.childEducation.stage,
+          stageLabel: entry.childEducation.stageLabel,
+          preferredFormat: entry.childEducation.format,
+          preferredFormatLabel: entry.childEducation.formatLabel,
+          schoolAsImmigrationBasis: entry.childEducation.schoolAsBasis,
+          status: entry.childEducation.status,
+          statusLabel: childEducationStatusLabel(entry.childEducation.status),
+          summary: entry.childEducation.headline,
+          dependent: entry.childEducation.profile ? clone(entry.childEducation.profile.dependent) : null,
+          student: entry.childEducation.profile ? clone(entry.childEducation.profile.student) : null,
+          guardian: entry.childEducation.profile ? clone(entry.childEducation.profile.guardian) : null,
+          provision: entry.childEducation.provision ? clone(entry.childEducation.provision) : null,
+          jurisdiction: entry.childEducation.profile ? entry.childEducation.profile.jurisdiction : null,
+          checkedAt: entry.childEducation.profile ? entry.childEducation.profile.checkedAt : null,
+          confidence: entry.childEducation.profile ? entry.childEducation.profile.confidence : "C"
+        }
+      },
       legal: {
         entryBasis: entry.entry,
         stay: entry.stay,
@@ -1414,6 +1820,30 @@
     };
   }
 
+  function finalistRouteSnapshot(entry) {
+    var choice = finalistChoice(entry.id);
+    var city = selectedFinalistCity(entry);
+    var snapshot = planRouteSnapshot(entry, finalistRoleLabel(choice.role), city);
+    var monthlyRange = city ? adjustedRange(city.budget) : null;
+    snapshot.decisionRole = {
+      id: choice.role,
+      label: finalistRoleLabel(choice.role),
+      selectedBy: "user",
+      updatedAt: choice.updatedAt
+    };
+    snapshot.selectedCity = city ? {
+      name: city.name,
+      selectedBy: "user",
+      monthlyHouseholdPlanningRange: monthlyRange,
+      firstYearBasePlanningRange: monthlyRange.map(function (value) { return value * 12; }),
+      routeApplicationCostEstimate: Number(entry.applyCost || 0),
+      excludedCostCategories: ["tax", "insurance", "education", "travel", "deposits", "inflation", "unexpected-costs"],
+      checkedAt: entry.checkedAt
+    } : null;
+    snapshot.readiness = finalistReadiness(entry, city);
+    return snapshot;
+  }
+
   function buildPlanPayload() {
     var trajectories = topRoutes();
     var comparison = comparisonEntries();
@@ -1423,12 +1853,17 @@
     var comparisonSnapshots = comparison.map(function (entry) {
       return planRouteSnapshot(entry, planRole(entry, trajectories));
     });
+    var finalistSnapshots = comparison.map(finalistRouteSnapshot);
+    var anchor = finalistSnapshots.find(function (entry) { return entry.decisionRole.id === "anchor"; }) || null;
+    var fallback = finalistSnapshots.find(function (entry) { return entry.decisionRole.id === "fallback"; }) || null;
     var checklist = buildVerificationChecklist(trajectories, comparison);
     var progress = planChecklistProgress(checklist);
     var nextItem = checklist.find(function (item) { return item.status !== "verified"; }) || null;
+    var presentationLocale = I18N ? I18N.locale : "ru";
     return {
       exportedAt: new Date().toISOString(),
       atlasVersion: APP_VERSION,
+      presentationLocale: presentationLocale,
       dataset: {
         version: DATA.meta.version,
         schemaVersion: DATA.meta.schemaVersion,
@@ -1436,14 +1871,37 @@
         nationalityLayer: state.nationality
       },
       planVersion: PLAN_VERSION,
-      profileVersion: 4,
+      profileVersion: 5,
       profile: clone(state),
+      presentation: {
+        locale: presentationLocale,
+        requestedOutcomeLabel: uiText(outcomeLabel(state.level)),
+        leaderLabel: trajectories[0] ? uiText(trajectories[0].country + " · " + trajectories[0].route) : null,
+        finalistLabels: finalistSnapshots.map(function (entry) {
+          return {
+            id: entry.id,
+            route: uiText(entry.country + " · " + entry.route),
+            role: uiText(entry.decisionRole.label),
+            city: entry.selectedCity ? uiText(entry.selectedCity.name) : null
+          };
+        }),
+        note: uiText("Это локализованные подписи для чтения. Канонические route ids, blockers, unknowns, даты и URL остаются в decision.")
+      },
       decision: {
         status: "current",
         requestedOutcome: { id: state.level, label: outcomeLabel(state.level) },
         leader: trajectorySnapshots[0] || null,
         trajectories: trajectorySnapshots,
         comparison: comparisonSnapshots,
+        finalists: {
+          version: FINALISTS_VERSION,
+          kind: "user-selected-finalists",
+          status: comparison.length < 2 ? "not-started" : anchor && fallback ? "roles-assigned" : "incomplete",
+          disclaimer: "Роли и города выбраны пользователем. Они не меняют сравнительный fit и не являются юридической рекомендацией.",
+          anchorRouteId: anchor ? anchor.id : null,
+          fallbackRouteId: fallback ? fallback.id : null,
+          routes: finalistSnapshots
+        },
         verificationBoard: {
           version: PLAN_BOARD_VERSION,
           progress: progress,
@@ -1543,6 +2001,26 @@
     return imported;
   }
 
+  function importFinalists(payload) {
+    var container = payload && payload.decision ? payload.decision.finalists : null;
+    var routes = Array.isArray(container) ? container : container && Array.isArray(container.routes) ? container.routes : [];
+    var importedState = emptyFinalistState();
+    routes.slice(0, 3).forEach(function (item) {
+      if (!item || typeof item.id !== "string" || !finalistRoute(item.id)) return;
+      var role = item.decisionRole && FINALIST_ROLES.includes(item.decisionRole.id) ? item.decisionRole.id : "unassigned";
+      var cityName = item.selectedCity && typeof item.selectedCity.name === "string" ? item.selectedCity.name : null;
+      importedState.choices[item.id] = {
+        role: role,
+        cityName: cityName,
+        updatedAt: item.decisionRole && validIsoDate(item.decisionRole.updatedAt) ? item.decisionRole.updatedAt : null
+      };
+    });
+    finalistState = normalizeFinalistState(importedState);
+    var imported = Object.keys(finalistState.choices).length;
+    if (imported) saveFinalists();
+    return imported;
+  }
+
   function renderMyPlan() {
     var ready = hasCalculated && !calculationDirty;
     var trajectories = ready ? topRoutes() : [];
@@ -1571,6 +2049,8 @@
     $("#planTrajectoryCount").textContent = trajectories.length;
     $("#planComparisonCount").textContent = comparison.length;
     $("#planCheckCount").textContent = progress.verified + " / " + progress.total;
+    $("#finalistRound").hidden = !ready;
+    if (ready) renderFinalistRound(comparison);
     $("#planBoard").hidden = !ready;
     if (ready) renderPlanBoard(checklist);
     else {
@@ -1600,9 +2080,10 @@
     downloadJson("atlas-pereezda-profile.json", {
       exportedAt: new Date().toISOString(),
       atlasVersion: APP_VERSION,
+      presentationLocale: I18N ? I18N.locale : "ru",
       datasetVersion: DATA.meta.version,
       schemaVersion: DATA.meta.schemaVersion,
-      profileVersion: 4,
+      profileVersion: 5,
       profile: clone(state)
     }, "Анкета скачана");
   }
@@ -1633,6 +2114,42 @@
     }
   }
 
+  function educationSourceLinks(profile, sourceIds) {
+    if (!profile || !Array.isArray(sourceIds)) return "";
+    return sourceIds.map(function (sourceId, index) {
+      var source = profile.sources.find(function (item) { return item.id === sourceId; });
+      return source ? '<a href="' + escapeHtml(source.url) + '" target="_blank" rel="noreferrer">Источник' + (sourceIds.length > 1 ? " " + (index + 1) : "") + ' ↗</a>' : "";
+    }).join("");
+  }
+
+  function educationRoleCard(title, record, profile) {
+    var safeRecord = record || { status: "needs-check", summary: "Для страны ещё нет официального исследования этого слоя.", sourceIds: [] };
+    return '<article class="education-role-card"><div><span>' + escapeHtml(title) + '</span><b class="' + childEducationStatusClass(safeRecord.status) + '">' + escapeHtml(childEducationStatusLabel(safeRecord.status)) + '</b></div><p>' + escapeHtml(safeRecord.summary) + '</p><footer>' + educationSourceLinks(profile, safeRecord.sourceIds) + '</footer></article>';
+  }
+
+  function renderChildEducationSection(entry) {
+    var assessment = entry.childEducation;
+    var profile = assessment.profile;
+    var dependent = profile && profile.dependent;
+    if (dependent && Array.isArray(dependent.routeIds) && !dependent.routeIds.includes(entry.id)) {
+      dependent = { status: "needs-check", summary: "Dependent-path ещё не связан с этим конкретным маршрутом; не переносите условия другого основания.", sourceIds: dependent.sourceIds };
+    }
+    var provision = assessment.provision || {
+      status: "needs-check",
+      summary: assessment.active ? "Для выбранного этапа нет отдельного официального слоя." : "Выберите этап образования в анкете, чтобы получить проверку сада или школы.",
+      sourceIds: []
+    };
+    return '<section class="drawer-section child-education-section"><div class="child-education-heading"><div><span>CHILD / EDUCATION</span><h3>Ребёнок и образование</h3></div><b class="' + childEducationStatusClass(assessment.status) + '">' + escapeHtml(childEducationStatusLabel(assessment.status)) + '</b></div>' +
+      '<div class="child-education-context"><div><span>Этап</span><strong>' + escapeHtml(assessment.stageLabel) + '</strong></div><div><span>Формат</span><strong>' + escapeHtml(assessment.formatLabel) + '</strong></div><div><span>Школа как основание</span><strong>' + (assessment.schoolAsBasis ? "проверять" : "нет") + '</strong></div></div>' +
+      '<div class="education-role-grid">' +
+        educationRoleCard("01 · По статусу родителя", dependent, profile) +
+        educationRoleCard("02 · Собственный school route", profile && profile.student, profile) +
+        educationRoleCard("03 · Сопровождающий родитель", profile && profile.guardian, profile) +
+        educationRoleCard("04 · Сад / школа", provision, profile) +
+      '</div>' +
+      '<p class="education-boundary">' + (profile ? escapeHtml(profile.jurisdiction) + ' · checked ' + escapeHtml(profile.checkedAt) + ' · confidence ' + escapeHtml(profile.confidence) + '. ' : "Официальный country layer отсутствует. ") + 'Школьная виза ребёнка не означает автоматически статус или право на работу родителя. Стоимость и места international / bilingual проверяются по городу.</p></section>';
+  }
+
   function openDrawer(id, profileContext, entryCollection) {
     var entry = (entryCollection || computed).find(function (item) { return item.id === id; });
     if (!entry) return;
@@ -1642,7 +2159,8 @@
     var outcomeRank = LEVEL_RANK[entry.outcome];
     var workProfile = DATA.workProfiles[entry.code];
     var blockers = entry.blockers.length ? entry.blockers.map(function (item) { return '<li>' + escapeHtml(item) + '</li>'; }).join("") : '<li class="ok-item">Нет hard blocker для текущего профиля.</li>';
-    var unknowns = entry.warnings.length ? entry.warnings.slice(0, 7).map(function (item) { return '<li>' + escapeHtml(item) + '</li>'; }).join("") : '<li>Критические неизвестные не зафиксированы.</li>';
+    var allUnknowns = entry.warnings.concat(entry.childEducation.unknowns);
+    var unknowns = allUnknowns.length ? allUnknowns.slice(0, 9).map(function (item) { return '<li>' + escapeHtml(item) + '</li>'; }).join("") : '<li>Критические неизвестные не зафиксированы.</li>';
     var sources = entry.sources.map(function (source) {
       if (/^\.\.\//.test(source.url)) return '<li><span class="source-pending">' + escapeHtml(source.label) + ' · needs official source</span><span>verification queue</span></li>';
       return '<li><a href="' + escapeHtml(source.url) + '" target="_blank" rel="noreferrer">' + escapeHtml(source.label) + ' ↗</a><span>' + escapeHtml(source.kind) + '</span></li>';
@@ -1650,6 +2168,11 @@
     if (workProfile) {
       sources += workProfile.sources.map(function (url, sourceIndex) {
         return '<li><a href="' + escapeHtml(url) + '" target="_blank" rel="noreferrer">Право на работу · official ' + (sourceIndex + 1) + ' ↗</a><span>official · ' + escapeHtml(workProfile.checkedAt) + '</span></li>';
+      }).join("");
+    }
+    if (entry.childEducation.profile) {
+      sources += entry.childEducation.profile.sources.map(function (source) {
+        return '<li><a href="' + escapeHtml(source.url) + '" target="_blank" rel="noreferrer">' + escapeHtml(source.label) + ' ↗</a><span>official · ' + escapeHtml(entry.childEducation.profile.checkedAt) + '</span></li>';
       }).join("");
     }
     var cityTabs = entry.cities.map(function (city, index) {
@@ -1694,7 +2217,7 @@
         '<p class="work-reality-mode">' + escapeHtml(workModeLabel(state.workMode)) + ' · ' + escapeHtml(skillSectorLabel(state.skillSector)) + (state.skillText ? ' · ' + escapeHtml(state.skillText) : '') + '</p>' +
         '<p>' + escapeHtml(entry.workAssessment.note) + '</p>' +
         '<small>' + (workProfile ? 'Правило проверено ' + escapeHtml(workProfile.checkedAt) + '. ' : 'Для страны нет углублённого work layer. ') + 'Налоги, лицензия профессии и муниципальные правила проверяются отдельно.</small>' +
-      '</section>' + talentPanel +
+      '</section>' + renderChildEducationSection(entry) + talentPanel +
       '<section class="drawer-section"><h3>Города для первого расчёта</h3><div class="city-tabs">' + cityTabs + '</div><div id="drawerCityProfile"></div></section>' +
       '<section class="drawer-section"><h3>Ваши hard blockers</h3><ul class="blocker-list">' + blockers + '</ul></section>' +
       '<section class="drawer-section"><h3>Что ещё проверить</h3><ul class="unknown-list">' + unknowns + '</ul></section>' +
@@ -1816,6 +2339,9 @@
     $("#nationalityInput").value = state.nationality;
     $("#adultsInput").value = state.adults;
     $("#childrenInput").value = state.children;
+    $("#childEducationStageInput").value = state.childEducationStage;
+    $("#childEducationFormatInput").value = state.childEducationFormat;
+    $("#childEducationVisaInput").checked = state.childEducationVisa;
     $("#incomeInput").value = state.income;
     $("#currentSpendInput").value = state.currentSpend;
     $("#budgetInput").value = state.budget;
@@ -1864,6 +2390,9 @@
     bindProfileInput("nationalityInput", "nationality", "text");
     bindProfileInput("adultsInput", "adults", "number");
     bindProfileInput("childrenInput", "children", "number");
+    bindProfileInput("childEducationStageInput", "childEducationStage", "text");
+    bindProfileInput("childEducationFormatInput", "childEducationFormat", "text");
+    bindProfileInput("childEducationVisaInput", "childEducationVisa", "checkbox");
     bindProfileInput("incomeInput", "income", "number");
     bindProfileInput("currentSpendInput", "currentSpend", "number");
     bindProfileInput("budgetInput", "budget", "number");
@@ -1907,6 +2436,7 @@
     });
     $("#exportPlanButton").addEventListener("click", exportPlan);
     $("#planProfileButton").addEventListener("click", exportProfile);
+    $("#loadDemoButton").addEventListener("click", loadJudgeDemo);
     $("#planNextButton").addEventListener("click", function () {
       var id = $("#planNextButton").dataset.checkId;
       if (!id) return;
@@ -1922,6 +2452,19 @@
     $("#planChecklist").addEventListener("click", function (event) {
       var openButton = event.target.closest("[data-plan-open]");
       if (openButton) openDrawer(openButton.dataset.planOpen);
+    });
+    $("#finalistChooseButton").addEventListener("click", function () {
+      $("#compareSection").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    $("#finalistRound").addEventListener("change", function (event) {
+      var roleSelect = event.target.closest("[data-finalist-role]");
+      var citySelect = event.target.closest("[data-finalist-city]");
+      if (roleSelect) setFinalistRole(roleSelect.dataset.finalistRole, roleSelect.value);
+      if (citySelect) setFinalistCity(citySelect.dataset.finalistCity, citySelect.value);
+    });
+    $("#finalistRound").addEventListener("click", function (event) {
+      var openButton = event.target.closest("[data-finalist-open]");
+      if (openButton) openDrawer(openButton.dataset.finalistOpen);
     });
     $("#openScenarioButton").addEventListener("click", openScenarioLab);
     $("#scenarioForm").addEventListener("submit", function (event) {
@@ -2067,6 +2610,8 @@
           var parsed = JSON.parse(reader.result);
           state = mergeProfile(parsed.profile || parsed);
           var importedStatuses = importPlanBoard(parsed);
+          clearFinalists();
+          var importedFinalists = importFinalists(parsed);
           clearScenario();
           visibleLimit = PAGE_SIZE;
           hasCalculated = false;
@@ -2074,9 +2619,7 @@
           syncForm();
           recompute();
           showToast(parsed.planVersion
-            ? importedStatuses
-              ? "Профиль и статусы плана импортированы — пересчитайте"
-              : "Профиль из плана импортирован — пересчитайте"
+            ? "План импортирован" + (importedStatuses ? " · статусы " + importedStatuses : "") + (importedFinalists ? " · финалисты " + importedFinalists : "") + " — пересчитайте"
             : "Профиль импортирован — пересчитайте");
         } catch (error) {
           showToast("Не удалось прочитать JSON");
@@ -2087,10 +2630,11 @@
     });
 
     $("#resetButton").addEventListener("click", function () {
-      if (!window.confirm("Сбросить анкету, сравнение, сценарий и статусы плана?")) return;
+      if (!window.confirm(uiText("Сбросить анкету, сравнение, сценарий, финалистов и статусы плана?"))) return;
       state = clone(DEFAULT_PROFILE);
       clearPlanBoard();
       clearScenario();
+      clearFinalists();
       visibleLimit = PAGE_SIZE;
       hasCalculated = false;
       calculationDirty = false;

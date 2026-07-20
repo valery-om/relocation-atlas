@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Commissioner:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=0.8.0">
+  <link rel="stylesheet" href="styles.css?v=0.11.0">
 </head>
 <body>
   <a class="skip-link" href="#atlas">Перейти к анкете</a>
@@ -27,6 +27,10 @@
       <span><b id="topRouteCount">40</b> маршрутов</span>
       <span><b id="topCountryCount">35</b> стран</span>
       <span class="top-status-muted">57 в screening universe</span>
+    </div>
+    <div class="locale-control" role="group" aria-label="Язык">
+      <button type="button" data-locale-option="ru" aria-pressed="true">RU</button>
+      <button type="button" data-locale-option="en" aria-pressed="false">EN</button>
     </div>
     <nav class="top-actions" aria-label="Действия с профилем">
       <button class="quiet-button" type="button" id="importButton" title="Импортировать профиль"><span>↥</span><b>Импорт</b></button>
@@ -54,6 +58,7 @@
         <p>Проверьте, где вы сможете легально жить и работать — и ведёт ли выбранное основание к ВНЖ или гражданству. Атлас сопоставит бюджет, семью и ограничения, а затем покажет источники и неизвестные.</p>
         <div class="hero-actions">
           <a class="primary-button" href="#atlas">Рассчитать маршрут <span>↓</span></a>
+          <button class="demo-button" id="loadDemoButton" type="button" data-english-only>Load judge demo</button>
           <button class="text-button" type="button" data-open-method>Как обновляются данные</button>
         </div>
       </div>
@@ -119,6 +124,34 @@
                 <input id="childrenInput" name="children" type="number" min="0" max="8" step="1" value="0">
               </label>
             </div>
+            <section class="child-education-input" aria-labelledby="childEducationTitle">
+              <div class="child-education-input-heading">
+                <div><span>Необязательно</span><strong id="childEducationTitle">Ребёнок и образование</strong></div>
+                <b>без имени и даты рождения</b>
+              </div>
+              <div class="two-fields">
+                <label class="field">
+                  <span>Следующий этап</span>
+                  <select id="childEducationStageInput" name="childEducationStage">
+                    <option value="none">Пока не учитывать</option>
+                    <option value="nursery">Ясли · до 3 лет</option>
+                    <option value="kindergarten">Детский сад · 3–6 лет</option>
+                    <option value="primary">Начальная школа</option>
+                    <option value="secondary">Средняя / старшая школа</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span>Предпочтительный формат</span>
+                  <select id="childEducationFormatInput" name="childEducationFormat">
+                    <option value="either">Любой подходящий</option>
+                    <option value="local">Местная школа / сад</option>
+                    <option value="international">International / bilingual</option>
+                  </select>
+                </label>
+              </div>
+              <label class="switch-row child-education-switch"><span>Проверять школу как отдельное основание въезда</span><input id="childEducationVisaInput" type="checkbox"><i></i></label>
+              <p>Atlas отдельно покажет статус ребёнка, сопровождающего родителя и доступ к саду или школе. Ответ не повышает рейтинг.</p>
+            </section>
             <label class="field">
               <span>Какой результат вам нужен</span>
               <select id="levelInput" name="level">
@@ -442,6 +475,29 @@
             <article><span>Проверено</span><strong id="planCheckCount">0 / 0</strong><small>из blockers + unknowns</small></article>
           </div>
 
+          <section class="finalist-round" id="finalistRound" aria-labelledby="finalistRoundTitle" hidden>
+            <div class="finalist-heading">
+              <div>
+                <span>FINAL DECISION ROUND</span>
+                <h3 id="finalistRoundTitle">Финалисты: основной<br><em>и запасной маршрут.</em></h3>
+                <p>Роли и город выбираете вы. Они не меняют сравнительный fit — Atlas только раскладывает готовность по отдельным проверкам.</p>
+              </div>
+              <strong class="finalist-status" id="finalistDecisionStatus" data-state="empty">Нужны 2–3 маршрута</strong>
+            </div>
+
+            <div class="finalist-empty" id="finalistEmpty">
+              <span>Сейчас в сравнении меньше двух вариантов.</span>
+              <strong>Сначала выберите 2–3 реальных финалиста.</strong>
+              <button type="button" id="finalistChooseButton">Перейти к сравнению <span>↑</span></button>
+            </div>
+
+            <div class="finalist-workspace" id="finalistWorkspace" hidden>
+              <div class="finalist-role-summary" id="finalistRoleSummary" aria-live="polite"></div>
+              <div class="finalist-cards" id="finalistCards"></div>
+              <p class="finalist-boundary">Базовый диапазон первого года = 12 × городская месячная корзина для вашей семьи. В него не входят налоги, страховка, образование, перелёты, депозиты, инфляция и непредвиденные расходы; route application cost показан отдельно.</p>
+            </div>
+          </section>
+
           <section class="plan-board" id="planBoard" aria-labelledby="planBoardTitle" hidden>
             <div class="plan-board-heading">
               <div>
@@ -606,7 +662,8 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="../routes/platform-data.js?v=0.8.0"></script>
-  <script src="app.js?v=0.8.0"></script>
+  <script src="../routes/platform-data.js?v=0.11.0"></script>
+  <script src="i18n.js?v=0.11.0"></script>
+  <script src="app.js?v=0.11.0"></script>
 </body>
 </html>
