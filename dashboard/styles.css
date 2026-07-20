@@ -19,11 +19,19 @@
   --mono: "IBM Plex Mono", monospace;
   --shadow: 0 28px 80px rgba(0, 0, 0, .22);
   --radius: 26px;
+  --topbar-height: 76px;
+  --journey-nav-height: 46px;
+  --sticky-stack-height: calc(var(--topbar-height) + var(--journey-nav-height));
+  --anchor-offset: calc(var(--sticky-stack-height) + 14px);
 }
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
-html { scroll-behavior: smooth; }
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: var(--anchor-offset);
+  scrollbar-gutter: stable;
+}
 body {
   margin: 0;
   min-width: 320px;
@@ -80,16 +88,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   position: sticky;
   top: 0;
   z-index: 100;
-  min-height: 76px;
+  height: var(--topbar-height);
+  min-height: var(--topbar-height);
   padding: 12px clamp(18px, 4vw, 64px);
   display: grid;
   grid-template-columns: minmax(220px, 1fr) auto auto minmax(220px, 1fr);
   align-items: center;
   gap: 20px;
   color: var(--paper);
-  background: rgba(7, 23, 21, .88);
-  border-bottom: 1px solid var(--line-light);
-  backdrop-filter: blur(18px);
+  background: rgba(7, 23, 21, .985);
+  border-bottom: 1px solid rgba(255, 253, 245, .08);
+  isolation: isolate;
 }
 
 .brand {
@@ -192,18 +201,20 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .journey-nav {
   position: sticky;
-  top: 76px;
+  top: var(--topbar-height);
   z-index: 95;
-  min-height: 46px;
+  height: var(--journey-nav-height);
+  min-height: var(--journey-nav-height);
   padding: 0 clamp(18px, 4vw, 64px);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 4px;
   color: var(--muted);
-  background: rgba(7, 23, 21, .94);
+  background: rgba(11, 32, 30, .99);
   border-bottom: 1px solid var(--line-light);
-  backdrop-filter: blur(18px);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, .16);
+  isolation: isolate;
 }
 .journey-nav a {
   min-height: 44px;
@@ -220,7 +231,8 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 .hero {
   position: relative;
-  min-height: min(900px, calc(100vh - 122px));
+  min-height: min(900px, calc(100vh - var(--sticky-stack-height)));
+  min-height: min(900px, calc(100svh - var(--sticky-stack-height)));
   max-width: 1600px;
   margin: 0 auto;
   padding: clamp(80px, 10vw, 150px) clamp(18px, 6vw, 90px) 150px;
@@ -404,7 +416,6 @@ html[lang="en"] [data-english-only] { display: inline-flex; align-items: center;
   max-width: 1600px;
   margin: 0 auto;
   padding: 60px clamp(18px, 4vw, 64px) 0;
-  scroll-margin-top: 136px;
   display: grid;
   grid-template-columns: 345px minmax(0, 1fr);
   gap: 24px;
@@ -529,8 +540,9 @@ input[type="range"] { accent-color: var(--ink-3); width: 100%; }
 .atlas-main { min-width: 0; align-self: stretch; }
 .calculation-gate {
   position: sticky;
-  top: 142px;
-  min-height: min(720px, calc(100vh - 122px));
+  top: calc(var(--sticky-stack-height) + 20px);
+  min-height: min(720px, calc(100vh - var(--sticky-stack-height)));
+  min-height: min(720px, calc(100svh - var(--sticky-stack-height)));
   padding: clamp(30px, 5vw, 72px);
   display: flex;
   flex-direction: column;
@@ -569,7 +581,6 @@ input[type="range"] { accent-color: var(--ink-3); width: 100%; }
 .gate-calculate-button { margin-top: 24px; min-height: 49px; padding: 0 18px; border: 0; border-radius: 999px; color: var(--paper); background: var(--ink); font-size: 10px; font-weight: 700; }
 .gate-calculate-button:hover { color: var(--ink); background: var(--acid); }
 .results-flow, .reference-flow { min-width: 0; }
-.result-overview { scroll-margin-top: 136px; }
 .level-navigator, .visa-catalog, .shortlist-section, .scenario-section, .explorer-section, .compare-section, .my-plan-section {
   margin-bottom: 24px;
   padding: clamp(24px, 4vw, 48px);
@@ -578,7 +589,6 @@ input[type="range"] { accent-color: var(--ink-3); width: 100%; }
   background: rgba(16, 39, 37, .65);
   box-shadow: 0 22px 60px rgba(0,0,0,.1);
 }
-.atlas-main, .visa-catalog, .scenario-section, .explorer-section, .compare-section, .my-plan-section, .coverage-section { scroll-margin-top: 136px; }
 .section-heading { display: flex; justify-content: space-between; gap: 40px; align-items: end; margin-bottom: 32px; }
 .section-heading h2 { margin: 13px 0 0; font: 400 clamp(38px, 4.2vw, 64px)/.94 var(--display); letter-spacing: -.045em; }
 .section-heading h2 em { color: var(--acid); font-weight: 400; }
@@ -1342,7 +1352,7 @@ input[type="range"] { accent-color: var(--ink-3); width: 100%; }
 .drawer-disclaimer { margin-top: 18px; color: #5d716d; font-size: 8px; line-height: 1.55; }
 
 .method-backdrop { place-items: center; justify-items: center; padding: 20px; }
-.method-dialog { position: relative; width: min(980px, 100%); max-height: calc(100vh - 40px); overflow: auto; padding: clamp(30px, 6vw, 70px); color: var(--paper); background: var(--ink-2); border: 1px solid var(--line-light); border-radius: 24px; box-shadow: var(--shadow); transform: translateY(30px); transition: transform .25s; }
+.method-dialog { position: relative; width: min(980px, 100%); max-height: calc(100vh - 40px); max-height: calc(100svh - 40px); overflow: auto; padding: clamp(30px, 6vw, 70px); color: var(--paper); background: var(--ink-2); border: 1px solid var(--line-light); border-radius: 24px; box-shadow: var(--shadow); transform: translateY(30px); transition: transform .25s; }
 .method-backdrop.open .method-dialog { transform: translateY(0); }
 .method-dialog h2 { margin: 18px 0 35px; font: 400 clamp(45px, 6vw, 80px)/.9 var(--display); letter-spacing: -.05em; }
 .method-dialog h2 em { color: var(--acid); font-weight: 400; }
@@ -1391,8 +1401,9 @@ input[type="range"] { accent-color: var(--ink-3); width: 100%; }
 }
 
 @media (max-width: 760px) {
-  .topbar { min-height: 66px; padding: 10px 14px; gap: 8px; }
-  .journey-nav { top: 66px; padding: 0 10px; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; }
+  :root { --topbar-height: 66px; }
+  .topbar { padding: 10px 14px; gap: 8px; }
+  .journey-nav { padding: 0 10px; justify-content: flex-start; overflow-x: auto; scrollbar-width: none; }
   .journey-nav::-webkit-scrollbar { display: none; }
   .journey-nav a { flex: 0 0 auto; }
   .brand-mark { width: 37px; height: 37px; }
