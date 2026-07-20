@@ -36,7 +36,14 @@
   }
 
   var LEVEL_RANK = { temporary: 1, residence: 2, citizenship: 3 };
+  var APP_VERSION = "0.8.0";
+  var PLAN_VERSION = 2;
   var PROFILE_KEY = "relocation-atlas-profile-v4";
+  var PLAN_BOARD_KEY = "relocation-atlas-plan-board-v1";
+  var SCENARIO_KEY = "relocation-atlas-scenario-v1";
+  var PLAN_BOARD_VERSION = 1;
+  var SCENARIO_VERSION = 1;
+  var PLAN_CHECK_STATUSES = ["todo", "in-progress", "verified"];
   var LEGACY_PROFILE_KEYS = ["relocation-atlas-profile-v3", "relocation-atlas-profile-v2"];
   var VISA_TYPES_BY_ID = DATA.visaTypes.reduce(function (map, type) { map[type.id] = type; return map; }, {});
   var PAGE_SIZE = 9;
@@ -75,7 +82,10 @@
   };
 
   var state = loadProfile();
+  var planBoardState = loadPlanBoard();
+  var scenarioState = loadScenario();
   var computed = [];
+  var scenarioResult = null;
   var visibleLimit = PAGE_SIZE;
   var hasCalculated = false;
   var calculationDirty = false;
@@ -100,13 +110,135 @@
     return "$" + Math.round(number);
   }
 
+  function formatExactMoney(value) {
+    var number = Number(value);
+    if (!Number.isFinite(number)) return "—";
+    return "$" + Math.round(number).toLocaleString("en-US");
+  }
+
   function formatBudget(range, factor) {
     if (!range || range.length < 2) return "н/д";
     return "$" + Math.round(range[0] * factor / 100) * 100 + "–" + Math.round(range[1] * factor / 100) * 100;
   }
 
+  function adjustedRange(range) {
+    if (!range || range.length < 2) return null;
+    var factor = householdFactor();
+    return range.map(function (value) { return Math.round(value * factor / 100) * 100; });
+  }
+
   function clone(value) {
     return JSON.parse(JSON.stringify(value));
+  }
+
+  function emptyPlanBoard() {
+    return { version: PLAN_BOARD_VERSION, items: {} };
+  }
+
+  function validIsoDate(value) {
+    return typeof value === "string" && !Number.isNaN(Date.parse(value));
+  }
+
+  function loadPlanBoard() {
+    try {
+      var parsed = JSON.parse(localStorage.getItem(PLAN_BOARD_KEY) || "null");
+      if (!parsed || parsed.version !== PLAN_BOARD_VERSION || !parsed.items || typeof parsed.items !== "object" || Array.isArray(parsed.items)) return emptyPlanBoard();
+      var clean = emptyPlanBoard();
+      Object.keys(parsed.items).slice(0, 500).forEach(function (id) {
+        var item = parsed.items[id];
+        if (!/^[a-z0-9-]+:(?:hard-blocker|unknown):[a-z0-9]+$/i.test(id) || !item || !PLAN_CHECK_STATUSES.includes(item.status)) return;
+        clean.items[id] = {
+          status: item.status,
+          updatedAt: validIsoDate(item.updatedAt) ? item.updatedAt : null
+        };
+      });
+      return clean;
+    } catch (error) {
+      return emptyPlanBoard();
+    }
+  }
+
+  function savePlanBoard() {
+    try {
+      localStorage.setItem(PLAN_BOARD_KEY, JSON.stringify(planBoardState));
+    } catch (error) {
+      showToast("Браузер не сохранил статусы плана");
+    }
+  }
+
+  function clearPlanBoard() {
+    planBoardState = emptyPlanBoard();
+    try {
+      localStorage.removeItem(PLAN_BOARD_KEY);
+    } catch (error) {
+      showToast("Не удалось очистить статусы плана");
+    }
+  }
+
+  function emptyScenarioState() {
+    return { version: SCENARIO_VERSION, open: false, draft: null, hasCompared: false, baselineSignature: null };
+  }
+
+  function scenarioDraftFromProfile(profile) {
+    return {
+      budget: boundedNumber(profile.budget, 0, 1000000, DEFAULT_PROFILE.budget, false),
+      presence: ["unsure", "can-stay", "need-travel"].includes(profile.presence) ? profile.presence : "unsure",
+      workMode: ["remote", "local-job", "self-employed", "hands-on", "not-working"].includes(profile.workMode) ? profile.workMode : "remote",
+      childPlan: Boolean(profile.childPlan)
+    };
+  }
+
+  function normalizeScenarioDraft(draft, profile) {
+    var fallback = scenarioDraftFromProfile(profile || DEFAULT_PROFILE);
+    if (!draft || typeof draft !== "object" || Array.isArray(draft)) return fallback;
+    return scenarioDraftFromProfile(Object.assign({}, fallback, draft));
+  }
+
+  function loadScenario() {
+    try {
+      var parsed = JSON.parse(localStorage.getItem(SCENARIO_KEY) || "null");
+      if (!parsed || parsed.version !== SCENARIO_VERSION) return emptyScenarioState();
+      return {
+        version: SCENARIO_VERSION,
+        open: parsed.open === true,
+        draft: parsed.draft ? normalizeScenarioDraft(parsed.draft, state || DEFAULT_PROFILE) : null,
+        hasCompared: parsed.hasCompared === true,
+        baselineSignature: typeof parsed.baselineSignature === "string" ? parsed.baselineSignature : null
+      };
+    } catch (error) {
+      return emptyScenarioState();
+    }
+  }
+
+  function saveScenario() {
+    try {
+      localStorage.setItem(SCENARIO_KEY, JSON.stringify(scenarioState));
+    } catch (error) {
+      showToast("Браузер не сохранил сценарий");
+    }
+  }
+
+  function clearScenario() {
+    scenarioState = emptyScenarioState();
+    scenarioResult = null;
+    try {
+      localStorage.removeItem(SCENARIO_KEY);
+    } catch (error) {
+      showToast("Не удалось очистить сценарий");
+    }
+  }
+
+  function stableCheckHash(value) {
+    var hash = 2166136261;
+    String(value).trim().toLocaleLowerCase("ru-RU").split("").forEach(function (character) {
+      hash ^= character.charCodeAt(0);
+      hash = Math.imul(hash, 16777619);
+    });
+    return (hash >>> 0).toString(36);
+  }
+
+  function checklistItemId(routeId, type, label) {
+    return routeId + ":" + type + ":" + stableCheckHash(label);
   }
 
   function boundedNumber(value, min, max, fallback, integer) {
@@ -223,6 +355,14 @@
 
   function workModeLabel(mode) {
     return { remote: "Удалённая работа", "local-job": "Ищу местный найм", "self-employed": "Свои клиенты / self-employed", "hands-on": "Работа руками / с клиентами", "not-working": "Пока не планирую работать" }[mode] || mode;
+  }
+
+  function presenceLabel(value) {
+    return { unsure: "Пока не знаем", "can-stay": "Да, можем без выездов", "need-travel": "Нет, нужны поездки" }[value] || "Пока не знаем";
+  }
+
+  function childPlanLabel(value) {
+    return value ? "Да, реальный план" : "Нет";
   }
 
   function skillSectorLabel(sector) {
@@ -556,6 +696,107 @@
     return selected;
   }
 
+  function decisionProfileSignature(profile) {
+    var decisionProfile = {
+      nationality: profile.nationality,
+      level: profile.level,
+      adults: profile.adults,
+      children: profile.children,
+      income: profile.income,
+      currentSpend: profile.currentSpend,
+      budget: profile.budget,
+      savings: profile.savings,
+      investment: profile.investment,
+      zone: profile.zone,
+      climate: profile.climate,
+      seaPreference: profile.seaPreference,
+      mountainPreference: profile.mountainPreference,
+      stayStyle: profile.stayStyle,
+      workMode: profile.workMode,
+      skillSector: profile.skillSector,
+      skillText: profile.skillText,
+      horizon: profile.horizon,
+      presence: profile.presence,
+      study: profile.study,
+      talent: profile.talent,
+      childPlan: profile.childPlan,
+      keepDual: profile.keepDual,
+      weights: profile.weights
+    };
+    return stableCheckHash(JSON.stringify(decisionProfile));
+  }
+
+  function decisionForProfile(profile) {
+    var baselineState = state;
+    var baselineComputed = computed;
+    try {
+      state = mergeProfile(profile);
+      state.stayStyle = stayStyleForLevel(state.level);
+      computed = DATA.entries.map(evaluate);
+      var trajectories = topRoutes();
+      var leader = trajectories[0] || null;
+      return {
+        profile: clone(state),
+        entries: computed.slice(),
+        trajectories: trajectories,
+        leader: leader,
+        reason: leader ? mainReason(leader) : "Нет маршрута для выбранной цели",
+        constraint: leader ? mainConstraint(leader) : "Нет результата"
+      };
+    } finally {
+      state = baselineState;
+      computed = baselineComputed;
+    }
+  }
+
+  function scenarioProfile() {
+    var profile = clone(state);
+    var draft = normalizeScenarioDraft(scenarioState.draft, state);
+    profile.budget = draft.budget;
+    profile.presence = state.level === "citizenship" ? draft.presence : state.presence;
+    profile.workMode = draft.workMode;
+    profile.childPlan = draft.childPlan;
+    return profile;
+  }
+
+  function scenarioChanges() {
+    var draft = normalizeScenarioDraft(scenarioState.draft, state);
+    var changes = [];
+    if (Number(draft.budget) !== Number(state.budget)) changes.push("Бюджет: " + formatExactMoney(state.budget) + " → " + formatExactMoney(draft.budget) + "/мес.");
+    if (state.level === "citizenship" && draft.presence !== state.presence) changes.push("Поездки: " + presenceLabel(state.presence) + " → " + presenceLabel(draft.presence));
+    if (draft.workMode !== state.workMode) changes.push("Работа: " + workModeLabel(state.workMode) + " → " + workModeLabel(draft.workMode));
+    if (draft.childPlan !== state.childPlan) changes.push("Семейный сценарий: " + childPlanLabel(state.childPlan) + " → " + childPlanLabel(draft.childPlan));
+    return changes;
+  }
+
+  function routeRisks(entry) {
+    if (!entry) return [];
+    return entry.blockers.map(function (text) { return { key: "blocker:" + text, label: "Hard blocker · " + text }; })
+      .concat(entry.warnings.map(function (text) { return { key: "unknown:" + text, label: "Неизвестное · " + text }; }));
+  }
+
+  function riskDifference(left, right) {
+    var rightKeys = new Set(right.map(function (item) { return item.key; }));
+    return left.filter(function (item) { return !rightKeys.has(item.key); });
+  }
+
+  function scenarioRankingReason(baselineLeader, alternativeLeader, alternativeEntries) {
+    if (!baselineLeader || !alternativeLeader) return "Для одного из профилей нет подходящего маршрута.";
+    if (baselineLeader.id === alternativeLeader.id) return "Лидер не сменился; ниже показано, какие его риски и сравнительный fit изменились.";
+    var oldLeaderInScenario = alternativeEntries.find(function (entry) { return entry.id === baselineLeader.id; });
+    if (!oldLeaderInScenario) return "Новый лидер лучше соответствует выбранной цели после изменения ответов.";
+    if (alternativeLeader.blockers.length < oldLeaderInScenario.blockers.length) {
+      return "Новый лидер поднялся выше: в сценарии у него меньше hard blockers, чем у прежнего лидера.";
+    }
+    if (alternativeLeader.warnings.length < oldLeaderInScenario.warnings.length) {
+      return "Новый лидер поднялся выше: при равном числе blockers у него меньше неизвестных.";
+    }
+    if (alternativeLeader.score > oldLeaderInScenario.score) {
+      return "Новый лидер поднялся выше по сравнительному fit после применения изменённых ответов.";
+    }
+    return "Изменённые ответы поменяли порядок goal-aligned маршрутов; blockers и неизвестные по-прежнему важнее среднего fit.";
+  }
+
   function trajectoryRole(entry, index) {
     if (state.level === "temporary") {
       return { temporary: "Быстрый старт", residence: "Закрепиться", citizenship: "Citizenship anchor" }[entry.outcome] || "Траектория";
@@ -576,6 +817,7 @@
   function renderCalculationState() {
     var showResults = hasCalculated && !calculationDirty;
     $("#resultsFlow").hidden = !showResults;
+    $("#referenceFlow").hidden = !showResults;
     $("#calculationGate").hidden = showResults;
     $("#calculateButton span").textContent = hasCalculated ? "Пересчитать траектории" : "Рассчитать траектории";
     if (!showResults) {
@@ -606,6 +848,8 @@
     if (hasCalculated) calculationDirty = true;
     saveProfile();
     renderCalculationState();
+    renderScenario();
+    renderMyPlan();
     renderDock();
   }
 
@@ -614,10 +858,12 @@
     renderVisaCatalog();
     renderOverview();
     renderShortlist();
+    renderScenario();
     renderFilters();
     renderRouteList();
     renderComparison();
     renderCalculationState();
+    renderMyPlan();
     renderDock();
   }
 
@@ -728,6 +974,176 @@
     }).join("");
   }
 
+  function ensureScenarioDraft() {
+    if (!scenarioState.draft) scenarioState.draft = scenarioDraftFromProfile(state);
+    else scenarioState.draft = normalizeScenarioDraft(scenarioState.draft, state);
+  }
+
+  function syncScenarioInputs() {
+    ensureScenarioDraft();
+    $("#scenarioBudgetInput").value = scenarioState.draft.budget;
+    $("#scenarioPresenceInput").value = scenarioState.draft.presence;
+    $("#scenarioWorkModeInput").value = scenarioState.draft.workMode;
+    $("#scenarioChildPlanInput").value = String(scenarioState.draft.childPlan);
+    $("#scenarioPresenceField").hidden = state.level !== "citizenship";
+  }
+
+  function renderScenarioRiskList(id, items, emptyText) {
+    $("#" + id).innerHTML = items.length
+      ? items.map(function (item) { return "<li>" + escapeHtml(item.label) + "</li>"; }).join("")
+      : '<li class="empty">' + escapeHtml(emptyText) + "</li>";
+  }
+
+  function renderScenarioResult(baselineLeader) {
+    var alternativeLeader = scenarioResult && scenarioResult.leader;
+    if (!baselineLeader || !alternativeLeader) {
+      $("#scenarioResult").hidden = false;
+      $("#scenarioResultTitle").textContent = "Для одного из профилей нет результата";
+      $("#scenarioResultReason").textContent = "Проверьте цель, фильтр части мира и исходные ограничения.";
+      $("#scenarioChangesList").innerHTML = '<li class="no-change">Недостаточно данных для дельты</li>';
+      $("#scenarioCurrentLeader").textContent = baselineLeader ? baselineLeader.country + " · " + baselineLeader.route : "Нет маршрута";
+      $("#scenarioAlternativeLeader").textContent = alternativeLeader ? alternativeLeader.country + " · " + alternativeLeader.route : "Нет маршрута";
+      $("#openScenarioRouteButton").disabled = true;
+      renderScenarioRiskList("scenarioRemovedRisks", [], "Нет сопоставимого результата");
+      renderScenarioRiskList("scenarioAddedRisks", [], "Нет сопоставимого результата");
+      return;
+    }
+
+    var leaderChanged = baselineLeader.id !== alternativeLeader.id;
+    var changes = scenarioChanges();
+    var baselineForAlternative = computed.find(function (entry) { return entry.id === alternativeLeader.id; });
+    var routeDelta = alternativeLeader.score - (baselineForAlternative ? baselineForAlternative.score : alternativeLeader.score);
+    var currentRisks = routeRisks(baselineLeader);
+    var alternativeRisks = routeRisks(alternativeLeader);
+    var removed = riskDifference(currentRisks, alternativeRisks);
+    var added = riskDifference(alternativeRisks, currentRisks);
+
+    $("#scenarioResult").hidden = false;
+    $("#scenarioResultLabel").textContent = leaderChanged ? "Лидер изменился" : "Лидер сохранился";
+    $("#scenarioResultTitle").textContent = leaderChanged
+      ? baselineLeader.country + " → " + alternativeLeader.country
+      : alternativeLeader.country + " остаётся первым";
+    $("#scenarioResultReason").textContent = (changes.length
+      ? "В расчёте изменены: " + changes.join(" · ") + ". "
+      : "Сценарий совпадает с текущими четырьмя ответами. ") + scenarioRankingReason(baselineLeader, alternativeLeader, scenarioResult.entries);
+    $("#scenarioChangesList").innerHTML = changes.length
+      ? changes.map(function (item) { return "<li>" + escapeHtml(item) + "</li>"; }).join("")
+      : '<li class="no-change">Изменений нет — контрольный расчёт</li>';
+
+    $("#scenarioCurrentLeader").textContent = baselineLeader.country + " · " + baselineLeader.route;
+    $("#scenarioCurrentReason").textContent = mainReason(baselineLeader);
+    $("#scenarioCurrentScore").textContent = baselineLeader.score + "/100";
+    $("#scenarioAlternativeLeader").textContent = alternativeLeader.country + " · " + alternativeLeader.route;
+    $("#scenarioAlternativeReason").textContent = scenarioResult.reason;
+    $("#scenarioAlternativeScore").textContent = alternativeLeader.score + "/100";
+    $("#scenarioRouteDelta").textContent = "для этого маршрута: " + (routeDelta > 0 ? "+" : "") + routeDelta + " fit";
+    $("#scenarioAlternativeQuality").textContent = "grade " + alternativeLeader.confidence + " · checked " + alternativeLeader.checkedAt;
+    $("#scenarioShiftMark").textContent = leaderChanged ? "→" : "=";
+    $("#scenarioShiftDelta").textContent = leaderChanged ? "смена лидера" : (routeDelta > 0 ? "+" : "") + routeDelta + " fit";
+    $("#openScenarioRouteButton").disabled = false;
+    $("#openScenarioRouteButton").dataset.routeId = alternativeLeader.id;
+    renderScenarioRiskList("scenarioRemovedRisks", removed, "Ничего не исчезло");
+    renderScenarioRiskList("scenarioAddedRisks", added, "Ничего нового не появилось");
+  }
+
+  function renderScenario() {
+    var ready = hasCalculated && !calculationDirty;
+    var lab = $("#scenarioLab");
+    var openButton = $("#openScenarioButton");
+    openButton.setAttribute("aria-expanded", ready && scenarioState.open ? "true" : "false");
+    openButton.innerHTML = scenarioState.open ? "Скрыть сценарий <span>↑</span>" : "Что изменит результат? <span>→</span>";
+    lab.hidden = !ready || !scenarioState.open;
+    if (!ready || !scenarioState.open) {
+      scenarioResult = null;
+      return;
+    }
+
+    ensureScenarioDraft();
+    syncScenarioInputs();
+    $("#scenarioBaselineBudget").textContent = formatExactMoney(state.budget) + "/мес.";
+    $("#scenarioBaselinePresence").textContent = state.level === "citizenship" ? presenceLabel(state.presence) : "Не влияет на эту цель";
+    $("#scenarioBaselineWork").textContent = workModeLabel(state.workMode);
+    $("#scenarioBaselineFamily").textContent = childPlanLabel(state.childPlan);
+
+    var signature = decisionProfileSignature(state);
+    if (scenarioState.hasCompared && scenarioState.baselineSignature !== signature) {
+      scenarioState.hasCompared = false;
+      scenarioState.baselineSignature = null;
+      scenarioResult = null;
+      saveScenario();
+    }
+
+    var changes = scenarioChanges();
+    var status = $("#scenarioFormStatus");
+    status.className = "scenario-form-status";
+    if (scenarioState.hasCompared) {
+      scenarioResult = decisionForProfile(scenarioProfile());
+      status.textContent = "Сценарий рассчитан. Исходная анкета не изменена.";
+      status.classList.add("ready");
+      renderScenarioResult(topRoutes()[0] || null);
+    } else {
+      scenarioResult = null;
+      $("#scenarioResult").hidden = true;
+      status.textContent = changes.length
+        ? "Готово изменений: " + changes.length + ". Нажмите «Сравнить с текущим»."
+        : "Сценарий совпадает с текущими ответами — можно сделать контрольный расчёт.";
+      if (changes.length) status.classList.add("dirty");
+    }
+  }
+
+  function openScenarioLab() {
+    if (!hasCalculated || calculationDirty) {
+      showToast("Сначала рассчитайте актуальный маршрут");
+      return;
+    }
+    scenarioState.open = !scenarioState.open;
+    ensureScenarioDraft();
+    saveScenario();
+    renderScenario();
+    if (scenarioState.open) requestAnimationFrame(function () {
+      $("#scenarioLab").scrollIntoView({ behavior: "smooth", block: "start" });
+      $("#scenarioBudgetInput").focus({ preventScroll: true });
+    });
+  }
+
+  function updateScenarioDraft(key, value) {
+    ensureScenarioDraft();
+    scenarioState.draft[key] = value;
+    scenarioState.hasCompared = false;
+    scenarioState.baselineSignature = null;
+    scenarioResult = null;
+    saveScenario();
+    renderScenario();
+  }
+
+  function compareScenario() {
+    if (!hasCalculated || calculationDirty) {
+      showToast("Сначала пересчитайте основной профиль");
+      return;
+    }
+    ensureScenarioDraft();
+    scenarioState.hasCompared = true;
+    scenarioState.baselineSignature = decisionProfileSignature(state);
+    saveScenario();
+    renderScenario();
+    requestAnimationFrame(function () {
+      $("#scenarioResult").scrollIntoView({ behavior: "smooth", block: "start" });
+      $("#scenarioResultTitle").setAttribute("tabindex", "-1");
+      $("#scenarioResultTitle").focus({ preventScroll: true });
+    });
+  }
+
+  function resetScenario() {
+    scenarioState.draft = scenarioDraftFromProfile(state);
+    scenarioState.hasCompared = false;
+    scenarioState.baselineSignature = null;
+    scenarioResult = null;
+    saveScenario();
+    renderScenario();
+    $("#scenarioBudgetInput").focus();
+    showToast("Сценарий сброшен — анкета не изменена");
+  }
+
   function renderFilters() {
     $$("[data-segment]").forEach(function (button) {
       button.classList.toggle("active", button.dataset.segment === state.segment);
@@ -812,6 +1228,393 @@
     $("#compareTable").innerHTML = header + '<tbody>' + rows + '</tbody>';
   }
 
+  function comparisonEntries() {
+    return state.pinned.map(function (id) {
+      return computed.find(function (entry) { return entry.id === id; });
+    }).filter(Boolean);
+  }
+
+  function planRole(entry, trajectories) {
+    var index = trajectories.findIndex(function (item) { return item.id === entry.id; });
+    return index >= 0 ? trajectoryRole(entry, index) : "Выбрано для сравнения";
+  }
+
+  function planSources(entry) {
+    var seen = new Set();
+    var sources = (entry.sources || []).filter(function (source) {
+      return /^https?:\/\//.test(source.url || "");
+    }).map(function (source) {
+      seen.add(source.url);
+      return { label: source.label, url: source.url, kind: source.kind || "official", checkedAt: entry.checkedAt };
+    });
+    var workProfile = DATA.workProfiles[entry.code];
+    if (workProfile) workProfile.sources.forEach(function (url, index) {
+      if (seen.has(url)) return;
+      seen.add(url);
+      sources.push({ label: "Право на работу · official " + (index + 1), url: url, kind: "official", checkedAt: workProfile.checkedAt });
+    });
+    return sources;
+  }
+
+  function planChecklistRoutes(trajectories, comparison) {
+    var routes = [];
+    trajectories.concat(comparison).forEach(function (entry) {
+      if (!routes.some(function (item) { return item.id === entry.id; })) routes.push(entry);
+    });
+    return routes;
+  }
+
+  function planCheckStatusLabel(status) {
+    return { todo: "Проверить", "in-progress": "В работе", verified: "Проверено" }[status] || "Проверить";
+  }
+
+  function planCheckTypeLabel(type) {
+    return type === "hard-blocker" ? "Hard blocker" : "Неизвестное";
+  }
+
+  function planChecklistItem(entry, type, label) {
+    var id = checklistItemId(entry.id, type, label);
+    var saved = planBoardState.items[id];
+    return {
+      id: id,
+      routeId: entry.id,
+      country: entry.country,
+      route: entry.route,
+      type: type,
+      priority: type === "hard-blocker" ? "hard-blocker" : "verify",
+      item: label,
+      status: saved ? saved.status : "todo",
+      updatedAt: saved ? saved.updatedAt : null,
+      dataQuality: {
+        confidence: entry.confidence,
+        checkedAt: entry.checkedAt
+      },
+      officialSources: planSources(entry)
+    };
+  }
+
+  function sortPlanChecklist(items) {
+    return items.sort(function (a, b) {
+      var completedDifference = Number(a.status === "verified") - Number(b.status === "verified");
+      if (completedDifference) return completedDifference;
+      var typeDifference = Number(a.type !== "hard-blocker") - Number(b.type !== "hard-blocker");
+      if (typeDifference) return typeDifference;
+      var preferenceDifference = Number(/не совпада(?:ет|ют) с предпочтением/i.test(a.item)) - Number(/не совпада(?:ет|ют) с предпочтением/i.test(b.item));
+      if (preferenceDifference) return preferenceDifference;
+      var activityDifference = Number(a.status !== "in-progress") - Number(b.status !== "in-progress");
+      if (activityDifference) return activityDifference;
+      return (a.country + a.item).localeCompare(b.country + b.item, "ru");
+    });
+  }
+
+  function buildVerificationChecklist(trajectories, comparison) {
+    var checklist = [];
+    var seen = new Set();
+    planChecklistRoutes(trajectories, comparison).forEach(function (entry) {
+      entry.blockers.forEach(function (item) {
+        var check = planChecklistItem(entry, "hard-blocker", item);
+        if (!seen.has(check.id)) {
+          seen.add(check.id);
+          checklist.push(check);
+        }
+      });
+      entry.warnings.forEach(function (item) {
+        var check = planChecklistItem(entry, "unknown", item);
+        if (!seen.has(check.id)) {
+          seen.add(check.id);
+          checklist.push(check);
+        }
+      });
+    });
+    return sortPlanChecklist(checklist);
+  }
+
+  function planChecklistProgress(checklist) {
+    return checklist.reduce(function (progress, item) {
+      progress.total += 1;
+      if (item.status === "verified") progress.verified += 1;
+      else if (item.status === "in-progress") progress.inProgress += 1;
+      else progress.todo += 1;
+      return progress;
+    }, { total: 0, verified: 0, inProgress: 0, todo: 0 });
+  }
+
+  function checklistExportItem(item) {
+    return {
+      id: item.id,
+      routeId: item.routeId,
+      country: item.country,
+      route: item.route,
+      type: item.type,
+      priority: item.priority,
+      item: item.item,
+      status: item.status,
+      updatedAt: item.updatedAt,
+      dataQuality: clone(item.dataQuality),
+      officialSources: clone(item.officialSources)
+    };
+  }
+
+  function planRouteSnapshot(entry, role) {
+    var city = entry.bestCity;
+    return {
+      id: entry.id,
+      role: role,
+      country: entry.country,
+      route: entry.route,
+      visaType: { id: entry.visaType, label: visaTypeLabel(entry.visaType) },
+      outcome: { id: entry.outcome, label: outcomeLabel(entry.outcome) },
+      comparativeFit: {
+        value: entry.score,
+        scale: "0-100",
+        kind: "comparative-fit",
+        disclaimer: DATA.meta.legalDisclaimer
+      },
+      reason: mainReason(entry),
+      blockers: clone(entry.blockers),
+      unknowns: clone(entry.warnings),
+      budget: {
+        currency: "USD",
+        kind: "planning-range",
+        city: city ? city.name : null,
+        monthlyHouseholdRange: city ? adjustedRange(city.budget) : null,
+        rentHouseholdRange: city ? adjustedRange(city.rent) : null,
+        currentSpendDeltaPercent: entry.lifestyle.delta == null ? null : Math.round(entry.lifestyle.delta * 100),
+        remainingIncomeMonthly: Math.round(entry.lifestyle.remaining)
+      },
+      work: {
+        requestedMode: state.workMode,
+        requestedModeLabel: workModeLabel(state.workMode),
+        status: entry.workAssessment.status,
+        statusLabel: workStatusLabel(entry.workAssessment.status),
+        note: entry.workAssessment.note
+      },
+      family: { spousePolicy: entry.spouse },
+      legal: {
+        entryBasis: entry.entry,
+        stay: entry.stay,
+        renewable: entry.renewable,
+        maximumOutcome: entry.outcome,
+        citizenshipYearsToApply: entry.citizenshipYears || null,
+        dualCitizenship: entry.dual,
+        presenceDemand: entry.presenceDemand ? clone(entry.presenceDemand) : null
+      },
+      resources: {
+        minimumIncomeMonthly: Number(entry.incomeMin || 0),
+        minimumFunds: Number(entry.fundsMin || 0),
+        minimumInvestment: Number(entry.investmentMin || 0),
+        estimatedApplicationCost: Number(entry.applyCost || 0)
+      },
+      dataQuality: {
+        status: entry.status,
+        confidence: entry.confidence,
+        checkedAt: entry.checkedAt
+      },
+      officialSources: planSources(entry)
+    };
+  }
+
+  function buildPlanPayload() {
+    var trajectories = topRoutes();
+    var comparison = comparisonEntries();
+    var trajectorySnapshots = trajectories.map(function (entry, index) {
+      return planRouteSnapshot(entry, trajectoryRole(entry, index));
+    });
+    var comparisonSnapshots = comparison.map(function (entry) {
+      return planRouteSnapshot(entry, planRole(entry, trajectories));
+    });
+    var checklist = buildVerificationChecklist(trajectories, comparison);
+    var progress = planChecklistProgress(checklist);
+    var nextItem = checklist.find(function (item) { return item.status !== "verified"; }) || null;
+    return {
+      exportedAt: new Date().toISOString(),
+      atlasVersion: APP_VERSION,
+      dataset: {
+        version: DATA.meta.version,
+        schemaVersion: DATA.meta.schemaVersion,
+        checkedAt: DATA.meta.checkedAt,
+        nationalityLayer: state.nationality
+      },
+      planVersion: PLAN_VERSION,
+      profileVersion: 4,
+      profile: clone(state),
+      decision: {
+        status: "current",
+        requestedOutcome: { id: state.level, label: outcomeLabel(state.level) },
+        leader: trajectorySnapshots[0] || null,
+        trajectories: trajectorySnapshots,
+        comparison: comparisonSnapshots,
+        verificationBoard: {
+          version: PLAN_BOARD_VERSION,
+          progress: progress,
+          nextItemId: nextItem ? nextItem.id : null
+        },
+        nextVerification: nextItem ? checklistExportItem(nextItem) : null,
+        verificationChecklist: checklist.map(checklistExportItem)
+      },
+      privacy: {
+        storage: "local-download",
+        containsFinancialAnswers: true,
+        note: "Файл создан локально в браузере. Atlas не отправляет его на сервер."
+      }
+    };
+  }
+
+  function renderPlanBoard(checklist) {
+    var progress = planChecklistProgress(checklist);
+    var nextItem = checklist.find(function (item) { return item.status !== "verified"; }) || null;
+    var percent = progress.total ? Math.round(progress.verified / progress.total * 100) : 0;
+    var next = $("#planNext");
+    var nextButton = $("#planNextButton");
+
+    $("#planProgressLabel").textContent = progress.verified + " / " + progress.total;
+    $("#planProgressTrack").setAttribute("aria-valuemax", progress.total);
+    $("#planProgressTrack").setAttribute("aria-valuenow", progress.verified);
+    $("#planProgressBar").style.width = percent + "%";
+
+    if (nextItem) {
+      next.dataset.state = "open";
+      next.dataset.kind = nextItem.type;
+      $("#planNextType").textContent = planCheckTypeLabel(nextItem.type) + " · следующий шаг";
+      $("#planNextTitle").textContent = nextItem.item;
+      $("#planNextMeta").textContent = nextItem.country + " · " + nextItem.route + " · данные проверены " + nextItem.dataQuality.checkedAt + " · confidence " + nextItem.dataQuality.confidence;
+      nextButton.hidden = false;
+      nextButton.dataset.checkId = nextItem.id;
+    } else {
+      next.dataset.state = "complete";
+      next.dataset.kind = "none";
+      $("#planNextType").textContent = progress.total ? "Текущий список изучен" : "Открытых проверок нет";
+      $("#planNextTitle").textContent = progress.total ? "Все пункты отмечены как проверенные" : "В текущем срезе нет blockers или unknowns";
+      $("#planNextMeta").textContent = "Это не подтверждение eligibility и не обещание одобрения. Перед подачей всё равно перепроверьте правила и даты.";
+      nextButton.hidden = true;
+      nextButton.dataset.checkId = "";
+    }
+
+    if (!checklist.length) {
+      $("#planChecklist").innerHTML = '<div class="plan-board-empty"><strong>Список пуст</strong><span>Atlas не нашёл зафиксированных blockers или unknowns для этих маршрутов. Откройте детали перед финальным решением.</span></div>';
+      return;
+    }
+
+    $("#planChecklist").innerHTML = checklist.map(function (item, index) {
+      var source = item.officialSources[0];
+      var sourceAction = source
+        ? '<a href="' + escapeHtml(source.url) + '" target="_blank" rel="noreferrer">Официальный источник ↗</a>'
+        : '<span class="plan-source-missing">Официальный источник требует проверки</span>';
+      var options = PLAN_CHECK_STATUSES.map(function (status) {
+        return '<option value="' + status + '"' + (item.status === status ? " selected" : "") + '>' + planCheckStatusLabel(status) + '</option>';
+      }).join("");
+      return '<article class="plan-check" data-check-id="' + escapeHtml(item.id) + '" data-kind="' + item.type + '" data-status="' + item.status + '">' +
+        '<div class="plan-check-number">' + String(index + 1).padStart(2, "0") + '</div>' +
+        '<div class="plan-check-body"><div class="plan-check-kicker"><span>' + escapeHtml(planCheckTypeLabel(item.type)) + '</span><b>' + escapeHtml(item.country) + '</b></div>' +
+        '<h4>' + escapeHtml(item.item) + '</h4><p>' + escapeHtml(item.route) + '</p>' +
+        '<div class="plan-check-meta"><span>checked ' + escapeHtml(item.dataQuality.checkedAt) + '</span><span>confidence ' + escapeHtml(item.dataQuality.confidence) + '</span>' + sourceAction + '<button type="button" data-plan-open="' + escapeHtml(item.routeId) + '">Детали маршрута</button></div></div>' +
+        '<label class="plan-check-status"><span>Статус проверки</span><select data-check-status="' + escapeHtml(item.id) + '" aria-label="Статус проверки: ' + escapeHtml(item.country) + ' — ' + escapeHtml(item.item) + '">' + options + '</select></label>' +
+      '</article>';
+    }).join("");
+  }
+
+  function setPlanCheckStatus(id, status) {
+    if (!id || !PLAN_CHECK_STATUSES.includes(status)) return;
+    planBoardState.items[id] = { status: status, updatedAt: new Date().toISOString() };
+    savePlanBoard();
+    renderMyPlan();
+    showToast("Статус: " + planCheckStatusLabel(status));
+  }
+
+  function importPlanBoard(payload) {
+    var checklist = payload && payload.decision && Array.isArray(payload.decision.verificationChecklist)
+      ? payload.decision.verificationChecklist.slice(0, 500)
+      : [];
+    var imported = 0;
+    checklist.forEach(function (item) {
+      if (!item || typeof item.routeId !== "string" || typeof item.item !== "string" || !PLAN_CHECK_STATUSES.includes(item.status)) return;
+      if (!DATA.entries.some(function (entry) { return entry.id === item.routeId; })) return;
+      var type = item.type === "hard-blocker" || item.priority === "hard-blocker" ? "hard-blocker" : item.type === "unknown" || item.priority === "verify" ? "unknown" : null;
+      if (!type) return;
+      var id = checklistItemId(item.routeId, type, item.item);
+      if (item.id && item.id !== id) return;
+      planBoardState.items[id] = {
+        status: item.status,
+        updatedAt: validIsoDate(item.updatedAt) ? item.updatedAt : null
+      };
+      imported += 1;
+    });
+    if (imported) savePlanBoard();
+    return imported;
+  }
+
+  function renderMyPlan() {
+    var ready = hasCalculated && !calculationDirty;
+    var trajectories = ready ? topRoutes() : [];
+    var comparison = ready ? comparisonEntries() : [];
+    var checklist = ready ? buildVerificationChecklist(trajectories, comparison) : [];
+    var progress = planChecklistProgress(checklist);
+    var status = $("#planStatus");
+    status.dataset.state = ready ? "ready" : calculationDirty ? "stale" : "empty";
+
+    if (ready) {
+      $("#planStateLabel").textContent = "Актуальный расчёт · dataset " + DATA.meta.version;
+      $("#planStateTitle").textContent = checklist.length && progress.verified === checklist.length ? "Текущий список изучен" : "План готов к работе";
+      $("#planStateText").textContent = "Начните с первого незакрытого hard blocker или unknown. Статусы сохраняются только в этом браузере и входят в приватный JSON; сравнительный fit не является вероятностью одобрения.";
+    } else if (calculationDirty) {
+      $("#planStateLabel").textContent = "Профиль изменился";
+      $("#planStateTitle").textContent = "Старый план больше не актуален";
+      $("#planStateText").textContent = "Пересчитайте траектории: Atlas не выгружает старую рекомендацию вместе с новыми ответами.";
+    } else {
+      $("#planStateLabel").textContent = "Сначала расчёт";
+      $("#planStateTitle").textContent = "План ещё не собран";
+      $("#planStateText").textContent = "Заполните анкету и рассчитайте траектории. После этого Atlas сохранит результат вместе с причинами, ограничениями и датами.";
+    }
+
+    $("#planLeader").textContent = ready && trajectories[0] ? trajectories[0].country : "—";
+    $("#planLeaderRole").textContent = ready && trajectories[0] ? trajectoryRole(trajectories[0], 0) : "после расчёта";
+    $("#planTrajectoryCount").textContent = trajectories.length;
+    $("#planComparisonCount").textContent = comparison.length;
+    $("#planCheckCount").textContent = progress.verified + " / " + progress.total;
+    $("#planBoard").hidden = !ready;
+    if (ready) renderPlanBoard(checklist);
+    else {
+      $("#planChecklist").innerHTML = "";
+      $("#planNextButton").dataset.checkId = "";
+    }
+    $("#exportPlanButton").hidden = !ready;
+    $("#planCalculateButton").hidden = ready;
+    $("#planCalculateButton").innerHTML = (calculationDirty ? "Пересчитать план" : "Рассчитать маршрут") + " <span>→</span>";
+  }
+
+  function downloadJson(filename, payload, message) {
+    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    var url = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.hidden = true;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+    showToast(message);
+  }
+
+  function exportProfile() {
+    downloadJson("atlas-pereezda-profile.json", {
+      exportedAt: new Date().toISOString(),
+      atlasVersion: APP_VERSION,
+      datasetVersion: DATA.meta.version,
+      schemaVersion: DATA.meta.schemaVersion,
+      profileVersion: 4,
+      profile: clone(state)
+    }, "Анкета скачана");
+  }
+
+  function exportPlan() {
+    if (!hasCalculated || calculationDirty) {
+      showToast("Сначала пересчитайте маршрут");
+      return;
+    }
+    downloadJson("atlas-pereezda-plan.json", buildPlanPayload(), "План скачан на устройство");
+  }
+
   function renderDock() {
     var dock = $("#compareDock");
     var entries = state.pinned.map(function (id) { return DATA.entries.find(function (entry) { return entry.id === id; }); }).filter(Boolean);
@@ -820,9 +1623,21 @@
     $("#dockCount").textContent = entries.length;
   }
 
-  function openDrawer(id) {
-    var entry = computed.find(function (item) { return item.id === id; });
+  function withProfileState(profile, callback) {
+    var previousState = state;
+    try {
+      state = profile;
+      return callback();
+    } finally {
+      state = previousState;
+    }
+  }
+
+  function openDrawer(id, profileContext, entryCollection) {
+    var entry = (entryCollection || computed).find(function (item) { return item.id === id; });
     if (!entry) return;
+    var drawerProfile = profileContext ? mergeProfile(profileContext) : state;
+    withProfileState(drawerProfile, function () {
     lastFocus = document.activeElement;
     var outcomeRank = LEVEL_RANK[entry.outcome];
     var workProfile = DATA.workProfiles[entry.code];
@@ -890,7 +1705,7 @@
       button.addEventListener("click", function () {
         $$("[data-city-index]", $("#drawerContent")).forEach(function (item) { item.classList.remove("active"); });
         button.classList.add("active");
-        renderDrawerCity(entry, Number(button.dataset.cityIndex));
+        withProfileState(drawerProfile, function () { renderDrawerCity(entry, Number(button.dataset.cityIndex)); });
       });
     });
     $("#drawerBackdrop").hidden = false;
@@ -898,6 +1713,7 @@
     $("#drawerBackdrop").setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
     $("#drawerClose").focus();
+    });
   }
 
   function renderDrawerCity(entry, index) {
@@ -1082,6 +1898,62 @@
       calculateRoutes(true);
     });
     $("#gateCalculateButton").addEventListener("click", function () { calculateRoutes(true); });
+    $("#planCalculateButton").addEventListener("click", function () {
+      var wasCalculated = hasCalculated;
+      calculateRoutes(!wasCalculated);
+      if (wasCalculated) requestAnimationFrame(function () {
+        $("#myPlan").scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+    $("#exportPlanButton").addEventListener("click", exportPlan);
+    $("#planProfileButton").addEventListener("click", exportProfile);
+    $("#planNextButton").addEventListener("click", function () {
+      var id = $("#planNextButton").dataset.checkId;
+      if (!id) return;
+      var row = $$("[data-check-id]", $("#planChecklist")).find(function (item) { return item.dataset.checkId === id; });
+      if (!row) return;
+      row.scrollIntoView({ behavior: "smooth", block: "center" });
+      requestAnimationFrame(function () { $("select", row).focus(); });
+    });
+    $("#planChecklist").addEventListener("change", function (event) {
+      var select = event.target.closest("[data-check-status]");
+      if (select) setPlanCheckStatus(select.dataset.checkStatus, select.value);
+    });
+    $("#planChecklist").addEventListener("click", function (event) {
+      var openButton = event.target.closest("[data-plan-open]");
+      if (openButton) openDrawer(openButton.dataset.planOpen);
+    });
+    $("#openScenarioButton").addEventListener("click", openScenarioLab);
+    $("#scenarioForm").addEventListener("submit", function (event) {
+      event.preventDefault();
+      compareScenario();
+    });
+    $("#scenarioBudgetInput").addEventListener("input", function (event) {
+      ensureScenarioDraft();
+      if (event.target.value === "") return;
+      scenarioState.draft.budget = boundedNumber(event.target.value, 0, 1000000, state.budget, false);
+      scenarioState.hasCompared = false;
+      scenarioResult = null;
+      saveScenario();
+    });
+    $("#scenarioBudgetInput").addEventListener("change", function (event) {
+      updateScenarioDraft("budget", boundedNumber(event.target.value, 0, 1000000, state.budget, false));
+    });
+    $("#scenarioPresenceInput").addEventListener("change", function (event) {
+      updateScenarioDraft("presence", event.target.value);
+    });
+    $("#scenarioWorkModeInput").addEventListener("change", function (event) {
+      updateScenarioDraft("workMode", event.target.value);
+    });
+    $("#scenarioChildPlanInput").addEventListener("change", function (event) {
+      updateScenarioDraft("childPlan", event.target.value === "true");
+    });
+    $("#resetScenarioButton").addEventListener("click", resetScenario);
+    $("#openScenarioRouteButton").addEventListener("click", function () {
+      var routeId = $("#openScenarioRouteButton").dataset.routeId;
+      if (!routeId || !scenarioResult) return;
+      openDrawer(routeId, scenarioResult.profile, scenarioResult.entries);
+    });
 
     $$("[data-segment]").forEach(function (button) {
       button.addEventListener("click", function () {
@@ -1097,7 +1969,7 @@
         state.zone = button.dataset.zone;
         visibleLimit = PAGE_SIZE;
         syncForm();
-        recompute();
+        markCalculationDirty();
       });
     });
 
@@ -1183,17 +2055,7 @@
       $("#compareSection").scrollIntoView({ behavior: "smooth", block: "start" });
     });
 
-    $("#exportButton").addEventListener("click", function () {
-      var payload = { exportedAt: new Date().toISOString(), atlasVersion: DATA.meta.version, schemaVersion: DATA.meta.schemaVersion, profileVersion: 4, profile: state };
-      var blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-      var url = URL.createObjectURL(blob);
-      var link = document.createElement("a");
-      link.href = url;
-      link.download = "atlas-pereezda-profile.json";
-      link.click();
-      URL.revokeObjectURL(url);
-      showToast("Профиль экспортирован");
-    });
+    $("#exportButton").addEventListener("click", exportProfile);
 
     $("#importButton").addEventListener("click", function () { $("#importInput").click(); });
     $("#importInput").addEventListener("change", function (event) {
@@ -1204,12 +2066,18 @@
         try {
           var parsed = JSON.parse(reader.result);
           state = mergeProfile(parsed.profile || parsed);
+          var importedStatuses = importPlanBoard(parsed);
+          clearScenario();
           visibleLimit = PAGE_SIZE;
           hasCalculated = false;
           calculationDirty = false;
           syncForm();
           recompute();
-          showToast("Профиль импортирован");
+          showToast(parsed.planVersion
+            ? importedStatuses
+              ? "Профиль и статусы плана импортированы — пересчитайте"
+              : "Профиль из плана импортирован — пересчитайте"
+            : "Профиль импортирован — пересчитайте");
         } catch (error) {
           showToast("Не удалось прочитать JSON");
         }
@@ -1219,8 +2087,10 @@
     });
 
     $("#resetButton").addEventListener("click", function () {
-      if (!window.confirm("Сбросить введённые данные и закреплённые маршруты?")) return;
+      if (!window.confirm("Сбросить анкету, сравнение, сценарий и статусы плана?")) return;
       state = clone(DEFAULT_PROFILE);
+      clearPlanBoard();
+      clearScenario();
       visibleLimit = PAGE_SIZE;
       hasCalculated = false;
       calculationDirty = false;

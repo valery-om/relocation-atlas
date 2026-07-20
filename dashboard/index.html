@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Commissioner:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=0.5.0">
+  <link rel="stylesheet" href="styles.css?v=0.8.0">
 </head>
 <body>
   <a class="skip-link" href="#atlas">Перейти к анкете</a>
@@ -30,7 +30,7 @@
     </div>
     <nav class="top-actions" aria-label="Действия с профилем">
       <button class="quiet-button" type="button" id="importButton" title="Импортировать профиль"><span>↥</span><b>Импорт</b></button>
-      <button class="quiet-button" type="button" id="exportButton" title="Экспортировать профиль"><span>↧</span><b>Экспорт</b></button>
+      <button class="quiet-button" type="button" id="exportButton" title="Скачать только анкету" aria-label="Скачать только анкету"><span>↧</span><b>Профиль</b></button>
       <button class="quiet-button danger" type="button" id="resetButton" title="Сбросить профиль"><span>↺</span><b>Сбросить</b></button>
       <input type="file" id="importInput" accept="application/json" hidden>
     </nav>
@@ -40,6 +40,7 @@
     <a href="#atlas">Подобрать</a>
     <a href="#decision">Результат</a>
     <a href="#compareSection">Сравнение</a>
+    <a href="#myPlan">Мой план</a>
     <a href="#visaCatalog">Визы</a>
     <a href="#explorer">Страны</a>
     <a href="#coverage">Данные</a>
@@ -286,6 +287,7 @@
             <strong id="leaderName">—</strong>
             <small id="leaderReason">Введите координаты — атлас пересчитает маршрут</small>
             <p class="leader-constraint"><b>Проверить:</b> <span id="leaderConstraint">—</span></p>
+            <button class="overview-scenario-button" id="openScenarioButton" type="button" aria-controls="scenarioLab" aria-expanded="false">Что изменит результат? <span>→</span></button>
           </div>
           <div class="overview-stat"><span>Уровень жизни</span><strong id="lifestyleSignal">—</strong></div>
           <div class="overview-stat"><span>Останется от дохода</span><strong id="incomeRemainder">—</strong></div>
@@ -304,6 +306,97 @@
           <div class="shortlist" id="shortlist"></div>
         </section>
 
+        <section class="scenario-section" id="scenarioLab" aria-labelledby="scenarioTitle" hidden>
+          <div class="section-heading scenario-heading">
+            <div>
+              <span class="panel-index">WHAT IF / LAYER 02B</span>
+              <h2 id="scenarioTitle">Поменять условие.<br><em>Увидеть причину.</em></h2>
+            </div>
+            <p>Atlas сравнивает текущий расчёт только с одной альтернативой. Сценарий остаётся локальным и не меняет анкету, сравнение или «Мой план».</p>
+          </div>
+
+          <div class="scenario-workbench">
+            <article class="scenario-baseline" aria-labelledby="scenarioBaselineTitle">
+              <div class="scenario-card-index"><span>01</span><b>Текущий расчёт</b></div>
+              <h3 id="scenarioBaselineTitle">Исходные ответы защищены</h3>
+              <dl class="scenario-baseline-facts">
+                <div><dt>Бюджет</dt><dd id="scenarioBaselineBudget">—</dd></div>
+                <div><dt>Поездки</dt><dd id="scenarioBaselinePresence">—</dd></div>
+                <div><dt>Работа</dt><dd id="scenarioBaselineWork">—</dd></div>
+                <div><dt>Семейный сценарий</dt><dd id="scenarioBaselineFamily">—</dd></div>
+              </dl>
+              <p><span aria-hidden="true">⌖</span> Эти значения берутся из последнего актуального расчёта. Ни одно поле анкеты ниже не изменится.</p>
+            </article>
+
+            <form class="scenario-form" id="scenarioForm">
+              <div class="scenario-card-index"><span>02</span><b>Альтернативный сценарий</b></div>
+              <div class="scenario-fields">
+                <label><span>Максимальный бюджет / месяц, USD</span><input id="scenarioBudgetInput" type="number" min="0" max="1000000" step="100" inputmode="numeric"></label>
+                <label id="scenarioPresenceField"><span>До двух лет без выездов</span><select id="scenarioPresenceInput">
+                  <option value="unsure">Пока не знаю</option>
+                  <option value="can-stay">Да, можем</option>
+                  <option value="need-travel">Нет, нужны поездки</option>
+                </select></label>
+                <label><span>Как планируете работать</span><select id="scenarioWorkModeInput">
+                  <option value="remote">Удалённо на внешний доход</option>
+                  <option value="local-job">Искать местный найм</option>
+                  <option value="self-employed">Свои клиенты / self-employed</option>
+                  <option value="hands-on">Работа руками / с клиентами</option>
+                  <option value="not-working">Пока не работать</option>
+                </select></label>
+                <label><span>Ребёнок — реальный семейный план</span><select id="scenarioChildPlanInput">
+                  <option value="false">Нет</option>
+                  <option value="true">Да</option>
+                </select></label>
+              </div>
+              <div class="scenario-form-actions">
+                <button class="scenario-compare-button" type="submit">Сравнить с текущим <span>→</span></button>
+                <button class="scenario-reset-button" id="resetScenarioButton" type="button">Сбросить сценарий</button>
+              </div>
+              <p class="scenario-form-status" id="scenarioFormStatus" role="status">Измените одно или несколько условий и сравните.</p>
+            </form>
+          </div>
+
+          <section class="scenario-result" id="scenarioResult" aria-labelledby="scenarioResultTitle" aria-live="polite" hidden>
+            <header class="scenario-result-heading">
+              <div>
+                <span id="scenarioResultLabel">Результат сравнения</span>
+                <h3 id="scenarioResultTitle">—</h3>
+                <p id="scenarioResultReason">—</p>
+              </div>
+              <strong class="scenario-isolation-note">Анкета не изменена</strong>
+            </header>
+
+            <div class="scenario-changes" aria-labelledby="scenarioChangesTitle">
+              <span id="scenarioChangesTitle">Что изменили</span>
+              <ul id="scenarioChangesList"></ul>
+            </div>
+
+            <div class="scenario-leaders">
+              <article class="scenario-leader-card current">
+                <span>01 · сейчас</span>
+                <h4 id="scenarioCurrentLeader">—</h4>
+                <p id="scenarioCurrentReason">—</p>
+                <div><b id="scenarioCurrentScore">—</b><small>сравнительный fit<br>не вероятность одобрения</small></div>
+              </article>
+              <div class="scenario-shift" aria-hidden="true"><span id="scenarioShiftMark">→</span><small id="scenarioShiftDelta">—</small></div>
+              <article class="scenario-leader-card alternative">
+                <span>02 · сценарий</span>
+                <h4 id="scenarioAlternativeLeader">—</h4>
+                <p id="scenarioAlternativeReason">—</p>
+                <div><b id="scenarioAlternativeScore">—</b><small id="scenarioRouteDelta">для этого маршрута</small></div>
+                <footer><span id="scenarioAlternativeQuality">—</span><button id="openScenarioRouteButton" type="button">Детали и источники ↗</button></footer>
+              </article>
+            </div>
+
+            <div class="scenario-risk-delta">
+              <article><span class="delta-removed">Ушло из выбранного результата</span><ul id="scenarioRemovedRisks"></ul></article>
+              <article><span class="delta-added">Появилось в выбранном результате</span><ul id="scenarioAddedRisks"></ul></article>
+            </div>
+            <p class="scenario-disclaimer">Дельта показывает результат той же модели на другой копии профиля. Она не подтверждает eligibility и не изменяет юридические факты или статус проверки.</p>
+          </section>
+        </section>
+
         <section class="compare-section" id="compareSection" aria-labelledby="compareTitle">
           <div class="section-heading">
             <div>
@@ -320,12 +413,76 @@
           <div class="compare-table-wrap" id="compareTableWrap" hidden>
             <table class="compare-table" id="compareTable"></table>
           </div>
+          <a class="compare-to-plan" href="#myPlan">Собрать мой план <span>→</span></a>
         </section>
+        </div>
+
+        <section class="my-plan-section" id="myPlan" aria-labelledby="myPlanTitle">
+          <div class="section-heading plan-heading">
+            <div>
+              <span class="panel-index">MY PLAN / 04</span>
+              <h2 id="myPlanTitle">Решение, которое<br><em>можно унести.</em></h2>
+            </div>
+            <p>Локальный snapshot анкеты и актуального расчёта. Ничего не отправляется на сервер и не синхронизируется без вашего действия.</p>
+          </div>
+
+          <div class="plan-status" id="planStatus" data-state="empty" aria-live="polite">
+            <div class="plan-compass" aria-hidden="true"><span>⌖</span><i></i></div>
+            <div class="plan-status-copy">
+              <span id="planStateLabel">Сначала расчёт</span>
+              <strong id="planStateTitle">План ещё не собран</strong>
+              <p id="planStateText">Заполните анкету и рассчитайте траектории. После этого Atlas сохранит результат вместе с причинами, ограничениями и датами.</p>
+            </div>
+          </div>
+
+          <div class="plan-summary" aria-label="Состав плана">
+            <article><span>Лидер</span><strong id="planLeader">—</strong><small id="planLeaderRole">после расчёта</small></article>
+            <article><span>Траектории</span><strong id="planTrajectoryCount">0</strong><small>разные роли решения</small></article>
+            <article><span>Сравнение</span><strong id="planComparisonCount">0</strong><small>выбрано вручную</small></article>
+            <article><span>Проверено</span><strong id="planCheckCount">0 / 0</strong><small>из blockers + unknowns</small></article>
+          </div>
+
+          <section class="plan-board" id="planBoard" aria-labelledby="planBoardTitle" hidden>
+            <div class="plan-board-heading">
+              <div>
+                <span>VERIFICATION BOARD</span>
+                <h3 id="planBoardTitle">Что проверить дальше</h3>
+                <p>Статус означает, что пункт изучен. Он не отменяет hard blocker и не подтверждает право на одобрение.</p>
+              </div>
+              <div class="plan-progress" aria-label="Прогресс проверки">
+                <strong id="planProgressLabel">0 / 0</strong>
+                <span>проверено</span>
+                <div class="plan-progress-track" id="planProgressTrack" role="progressbar" aria-label="Проверено пунктов" aria-valuemin="0" aria-valuemax="0" aria-valuenow="0"><i id="planProgressBar"></i></div>
+              </div>
+            </div>
+
+            <article class="plan-next" id="planNext" data-state="open">
+              <div class="plan-next-index" aria-hidden="true">01</div>
+              <div class="plan-next-copy">
+                <span id="planNextType">Следующий шаг</span>
+                <strong id="planNextTitle">—</strong>
+                <p id="planNextMeta">Сначала рассчитайте маршрут.</p>
+              </div>
+              <button class="plan-next-button" id="planNextButton" type="button">Открыть следующий шаг <span>↓</span></button>
+            </article>
+
+            <div class="plan-checklist" id="planChecklist" aria-live="polite"></div>
+          </section>
+
+          <div class="plan-actions">
+            <button class="plan-primary" id="planCalculateButton" type="button">Рассчитать маршрут <span>→</span></button>
+            <button class="plan-download" id="exportPlanButton" type="button" hidden>Скачать план JSON <span>↓</span></button>
+            <button class="plan-profile-export" id="planProfileButton" type="button">Скачать только анкету</button>
+            <p>В плане есть финансовые ответы. Файл остаётся на вашем устройстве — передавайте его только тому, кому доверяете.</p>
+          </div>
+        </section>
+
+        <div class="reference-flow" id="referenceFlow" hidden>
 
         <section class="visa-catalog" id="visaCatalog" aria-labelledby="visaCatalogTitle">
           <div class="section-heading visa-catalog-heading">
             <div>
-              <span class="panel-index">VISA TYPES / 04</span>
+              <span class="panel-index">VISA TYPES / 05</span>
               <h2 id="visaCatalogTitle">Не название.<br><em>Основание входа.</em></h2>
             </div>
             <p>Тип визы и финальный outcome разделены. Одна talent-виза может быть временной, другая — сразу давать permanent status.</p>
@@ -337,7 +494,7 @@
         <section class="explorer-section" id="explorer" aria-labelledby="explorerTitle">
           <div class="section-heading explorer-heading">
             <div>
-              <span class="panel-index">WORLD INDEX / 05</span>
+              <span class="panel-index">WORLD INDEX / 06</span>
               <h2 id="explorerTitle">Глобальный<br><em>экран</em></h2>
             </div>
             <div class="explorer-tools">
@@ -382,7 +539,7 @@
 
         <section class="coverage-section" id="coverage" aria-labelledby="coverageTitle">
           <div class="coverage-copy">
-            <span class="panel-index">DATA ROOM / 06</span>
+            <span class="panel-index">DATA ROOM / 07</span>
             <h2 id="coverageTitle">Что уже известно —<br><em>и что ещё нет</em></h2>
             <p>Атлас специально показывает границы знания. Текущий срез моделирует 35 стран из 57 в screening universe. Наличие карточки не означает рекомендацию; отсутствие — не означает, что страна невозможна.</p>
             <button class="text-button light" type="button" data-open-method>Открыть методику и очередь обновлений →</button>
@@ -449,7 +606,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="../routes/platform-data.js?v=0.5.0"></script>
-  <script src="app.js?v=0.5.0"></script>
+  <script src="../routes/platform-data.js?v=0.8.0"></script>
+  <script src="app.js?v=0.8.0"></script>
 </body>
 </html>
