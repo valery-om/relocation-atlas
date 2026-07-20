@@ -59,6 +59,7 @@
     skillSector: "digital",
     skillText: "",
     horizon: 6,
+    presence: "unsure",
     study: true,
     talent: false,
     childPlan: false,
@@ -163,6 +164,7 @@
     if (!["any", "direct", "near"].includes(profile.seaPreference)) profile.seaPreference = "any";
     if (!["any", "direct", "near"].includes(profile.mountainPreference)) profile.mountainPreference = "any";
     if (!["wintering", "trial", "anchor"].includes(profile.stayStyle)) profile.stayStyle = "wintering";
+    if (!["unsure", "can-stay", "need-travel"].includes(profile.presence)) profile.presence = "unsure";
     if (!["remote", "local-job", "self-employed", "hands-on", "not-working"].includes(profile.workMode)) profile.workMode = "remote";
     if (!["digital", "professional", "beauty", "hospitality", "trades", "care", "creative", "other"].includes(profile.skillSector)) profile.skillSector = "other";
     profile.skillText = typeof profile.skillText === "string" ? profile.skillText.slice(0, 120) : "";
@@ -426,6 +428,10 @@
     if (lifestyle.status === "does-not-fit") blockers.push("Доход не покрывает среднюю city basket");
     if (state.level === "citizenship" && state.keepDual && entry.dual === "no") blockers.push("Проблема сохранения гражданства РФ");
     if (state.level === "citizenship" && entry.citizenshipYears && Number(state.horizon) < Number(entry.citizenshipYears)) blockers.push("Clock дольше " + state.horizon + " лет");
+    if (state.level === "citizenship" && entry.presenceDemand) {
+      if (state.presence === "need-travel") blockers.push("Нужны поездки: " + entry.presenceDemand.note);
+      if (state.presence === "unsure") blockers.push("Нет ответа о непрерывном присутствии: " + entry.presenceDemand.note);
+    }
     if (segment === "education" && !state.study) blockers.push("Нужна готовность учиться очно");
     if (segment === "talent" && !state.talent) blockers.push("Нужна подтверждаемая talent-гипотеза");
     if (segment === "family" && !state.childPlan) blockers.push("Ребёнок не отмечен как семейный план");
@@ -516,15 +522,49 @@
     return list;
   }
 
-  function topRoutes() {
-    var eligible = computed.filter(function (entry) {
-      return qualifiesLevel(entry) && (state.zone === "all" || entry.countryProfile.zone === state.zone);
-    }).sort(function (a, b) {
+  function rankForDecision(entries) {
+    return entries.slice().sort(function (a, b) {
       if (a.blockers.length !== b.blockers.length) return a.blockers.length - b.blockers.length;
+      if (a.warnings.length !== b.warnings.length) return a.warnings.length - b.warnings.length;
       return b.score - a.score;
     });
-    var clear = eligible.filter(function (entry) { return entry.blockers.length === 0; });
-    return (clear.length >= 3 ? clear : eligible).slice(0, 3);
+  }
+
+  function topRoutes() {
+    var eligible = rankForDecision(computed.filter(function (entry) {
+      return qualifiesLevel(entry) && (state.zone === "all" || entry.countryProfile.zone === state.zone);
+    }));
+    var selected = [];
+
+    function addBest(filter) {
+      var candidate = eligible.find(function (entry) {
+        return selected.indexOf(entry) < 0 && filter(entry);
+      });
+      if (candidate) selected.push(candidate);
+    }
+
+    addBest(function (entry) { return entry.outcome === state.level; });
+    if (state.level === "temporary") {
+      addBest(function (entry) { return entry.outcome === "residence"; });
+      addBest(function (entry) { return entry.outcome === "citizenship"; });
+    } else if (state.level === "residence") {
+      addBest(function (entry) { return entry.outcome === "citizenship"; });
+    }
+    eligible.forEach(function (entry) {
+      if (selected.length < 3 && selected.indexOf(entry) < 0) selected.push(entry);
+    });
+    return selected;
+  }
+
+  function trajectoryRole(entry, index) {
+    if (state.level === "temporary") {
+      return { temporary: "Быстрый старт", residence: "Закрепиться", citizenship: "Citizenship anchor" }[entry.outcome] || "Траектория";
+    }
+    if (state.level === "residence") {
+      if (entry.outcome === "residence") return index === 0 ? "Лидер для ВНЖ" : "Residence fallback";
+      return "ВНЖ → citizenship";
+    }
+    return index === 0 ? "Citizenship leader" : index === 1 ? "Баланс / fallback" : "Альтернативный anchor";
   }
 
   function recompute() {
@@ -635,28 +675,37 @@
   }
 
   function mainReason(entry) {
-    if (entry.blockers.length) return entry.blockers[0];
     var reasons = [];
     if (entry.lifestyle.status === "improves") reasons.push("базовая жизнь дешевле");
     else if (entry.budgetFits) reasons.push("вписывается в planning budget");
     if (entry.workAssessment.status === "legal") reasons.push("работу можно оформить");
+    if (entry.presenceDemand && state.presence === "can-stay") reasons.push("presence clock совместим с ответом");
     if (entry.status === "verified") reasons.push("official facts checked");
     if (entry.metrics.infra >= 4) reasons.push("сильная инфраструктура");
     if (entry.components.speed >= 85) reasons.push("короткий горизонт");
-    return reasons.slice(0, 2).join(" · ") || "профиль проходит без hard blocker";
+    return reasons.slice(0, 2).join(" · ") || "сильнее других вариантов по выбранным весам";
+  }
+
+  function mainConstraint(entry) {
+    if (entry.blockers.length) return entry.blockers[0];
+    if (entry.warnings.length) return entry.warnings[0];
+    return "Критических blockers и неизвестных в текущем срезе не найдено";
   }
 
   function renderOverview() {
-    var top = topRoutes()[0];
+    var routes = topRoutes();
+    var top = routes[0];
+    $("#leaderRole").textContent = top ? trajectoryRole(top, 0) + " · " + outcomeLabel(top.outcome) : "Текущий лидер";
     $("#leaderName").textContent = top ? top.country + " · " + top.route : "Нет маршрута";
     $("#leaderReason").textContent = top ? mainReason(top) : "Измените исходные данные";
+    $("#leaderConstraint").textContent = top ? mainConstraint(top) : "—";
+    $("#leaderScore").textContent = top ? top.score + "/100" : "—";
     $("#lifestyleSignal").textContent = top ? signedPercent(top.lifestyle.delta) : "—";
     $("#lifestyleSignal").className = top ? lifestyleClass(top.lifestyle) : "";
     $("#incomeRemainder").textContent = top ? formatMoney(top.lifestyle.remaining) : "—";
     $("#incomeRemainder").className = top && top.lifestyle.remaining < 0 ? "negative-value" : "";
     $("#workSignal").textContent = top ? workStatusLabel(top.workAssessment.status) : "—";
     $("#workSignal").className = top ? workStatusClass(top.workAssessment.status) : "";
-    $("#pinnedCount").textContent = state.pinned.length + "/3";
   }
 
   function renderShortlist() {
@@ -665,15 +714,16 @@
       $("#shortlist").innerHTML = '<div class="route-empty">Для этого уровня пока нет совпадений.</div>';
       return;
     }
-    $("#shortlist").innerHTML = list.map(function (entry) {
+    $("#shortlist").innerHTML = list.map(function (entry, index) {
       var className = entry.blockers.length ? " blocked" : entry.status !== "verified" || entry.warnings.length ? " partial" : "";
-      var status = entry.blockers.length ? entry.blockers[0] : entry.status === "verified" ? "без hard blocker" : "нужна проверка";
+      var pinned = state.pinned.indexOf(entry.id) >= 0;
       return '<article class="short-card' + className + '">' +
-        '<div class="short-card-top"><span class="flag">' + entry.flag + '</span><span class="score-ring">' + entry.score + '</span></div>' +
-        '<div class="short-card-main"><span class="panel-index">' + escapeHtml(visaTypeLabel(entry.visaType)) + '</span><h3>' + escapeHtml(entry.country) + '</h3><div class="route-name">' + escapeHtml(entry.route) + ' · ' + escapeHtml(outcomeLabel(entry.outcome)) + '</div>' +
+        '<div class="short-card-top"><span class="flag">' + entry.flag + '</span><span class="score-ring">' + entry.score + '<small>fit</small></span></div>' +
+        '<div class="short-card-main"><span class="panel-index">' + escapeHtml(trajectoryRole(entry, index)) + '</span><h3>' + escapeHtml(entry.country) + '</h3><div class="route-name">' + escapeHtml(entry.route) + ' · ' + escapeHtml(outcomeLabel(entry.outcome)) + '</div>' +
         '<div class="short-signals"><span class="' + lifestyleClass(entry.lifestyle) + '">' + escapeHtml(lifestyleLabel(entry.lifestyle)) + ' ' + signedPercent(entry.lifestyle.delta) + '</span><span class="' + workStatusClass(entry.workAssessment.status) + '">' + escapeHtml(workStatusLabel(entry.workAssessment.status)) + '</span></div>' +
-        '<p class="short-card-reason">' + escapeHtml(mainReason(entry)) + '</p></div>' +
-        '<div class="short-card-bottom"><span class="status-pill' + (entry.blockers.length ? " danger" : "") + '">' + escapeHtml(status) + '</span><button class="open-arrow" type="button" data-open="' + entry.id + '" aria-label="Подробнее о ' + escapeHtml(entry.country) + '">↗</button></div>' +
+        '<div class="short-explanation"><p><b>Почему подходит</b>' + escapeHtml(mainReason(entry)) + '</p><p class="short-limit"><b>' + (entry.blockers.length ? "Hard blocker" : "Проверить") + '</b>' + escapeHtml(mainConstraint(entry)) + '</p></div>' +
+        '<div class="short-meta"><span>grade ' + escapeHtml(entry.confidence) + '</span><span>checked ' + escapeHtml(entry.checkedAt) + '</span></div></div>' +
+        '<div class="short-card-bottom"><button class="short-compare' + (pinned ? " pinned" : "") + '" type="button" data-pin="' + entry.id + '" aria-pressed="' + (pinned ? "true" : "false") + '">' + (pinned ? "✓ В сравнении" : "+ Сравнить") + '</button><button class="short-open" type="button" data-open="' + entry.id + '" aria-label="Подробнее о ' + escapeHtml(entry.country) + '">↗</button></div>' +
       '</article>';
     }).join("");
   }
@@ -713,7 +763,7 @@
           '<div class="route-cell"><span>жизнь · ' + (city ? escapeHtml(city.name) : "город") + '</span><strong class="' + lifestyleClass(entry.lifestyle) + '">' + escapeHtml(lifestyleLabel(entry.lifestyle)) + '</strong><small>' + (city ? formatBudget(city.budget, householdFactor()) + ' · ' + signedPercent(entry.lifestyle.delta) : "planning range") + '</small></div>' +
           '<div class="route-cell"><span>' + escapeHtml(workModeLabel(state.workMode)) + '</span><strong class="' + workStatusClass(entry.workAssessment.status) + '">' + escapeHtml(workStatusLabel(entry.workAssessment.status)) + '</strong><small>' + escapeHtml(entry.workAssessment.note) + '</small></div>' +
           '<div class="route-cell fit-score"><strong>' + entry.score + '</strong><small>fit</small><span class="freshness ' + freshnessClass(entry) + '"><i></i>' + escapeHtml(entry.checkedAt) + '</span></div>' +
-          '<div class="route-actions"><button type="button" data-open="' + entry.id + '">детали</button><button type="button" data-pin="' + entry.id + '" class="' + (pinned ? "pinned" : "") + '">' + (pinned ? "✓ в сравнении" : "+ сравнить") + '</button></div>' +
+          '<div class="route-actions"><button type="button" data-open="' + entry.id + '">детали</button><button type="button" data-pin="' + entry.id + '" aria-pressed="' + (pinned ? "true" : "false") + '" class="' + (pinned ? "pinned" : "") + '">' + (pinned ? "✓ в сравнении" : "+ сравнить") + '</button></div>' +
         '</article>';
       }).join("");
     }
@@ -739,10 +789,10 @@
     empty.hidden = true;
     wrap.hidden = false;
     var header = '<thead><tr><th>маршрут</th>' + entries.map(function (entry) {
-      return '<th><span>' + entry.flag + '</span><strong>' + escapeHtml(entry.country) + '</strong><small>' + escapeHtml(entry.route) + '</small><button class="remove-compare" type="button" data-remove-pin="' + entry.id + '">убрать</button></th>';
+      return '<th><span>' + entry.flag + '</span><strong>' + escapeHtml(entry.country) + '</strong><small>' + escapeHtml(entry.route) + '</small><button class="compare-open" type="button" data-open="' + entry.id + '">Открыть детали</button><button class="remove-compare" type="button" data-remove-pin="' + entry.id + '">убрать</button></th>';
     }).join("") + '</tr></thead>';
     var rows = [
-      comparisonRow("Персональный fit", entries.map(function (entry) { return '<strong>' + entry.score + '/100</strong>'; })),
+      comparisonRow("Сравнительный fit", entries.map(function (entry) { return '<strong>' + entry.score + '/100</strong><br><small>не вероятность одобрения</small>'; })),
       comparisonRow("Outcome", entries.map(function (entry) { return escapeHtml(outcomeLabel(entry.outcome)); })),
       comparisonRow("Тип визы", entries.map(function (entry) { return escapeHtml(visaTypeLabel(entry.visaType)); })),
       comparisonRow("Срок", entries.map(function (entry) { return escapeHtml(entry.stay); })),
@@ -802,8 +852,9 @@
 
     $("#drawerContent").innerHTML =
       '<div class="drawer-kicker">' + escapeHtml(entry.region) + ' · ' + escapeHtml(visaTypeLabel(entry.visaType)) + ' · checked ' + escapeHtml(entry.checkedAt) + '</div>' +
-      '<div class="drawer-title-row"><h2 id="drawerTitle"><span>' + entry.flag + '</span>' + escapeHtml(entry.country) + '</h2><div class="drawer-score">' + entry.score + '</div></div>' +
+      '<div class="drawer-title-row"><h2 id="drawerTitle"><span>' + entry.flag + '</span>' + escapeHtml(entry.country) + '</h2><div class="drawer-score">' + entry.score + '<small>fit</small></div></div>' +
       '<p class="drawer-summary">' + escapeHtml(entry.summary) + '</p>' +
+      '<section class="drawer-decision" aria-label="Объяснение персонального результата"><div><span>Почему в списке</span><strong>' + escapeHtml(mainReason(entry)) + '</strong></div><div class="decision-risk"><span>' + (entry.blockers.length ? "Hard blocker" : "Проверить") + '</span><strong>' + escapeHtml(mainConstraint(entry)) + '</strong></div><div><span>Качество данных</span><strong>grade ' + escapeHtml(entry.confidence) + ' · checked ' + escapeHtml(entry.checkedAt) + '</strong></div></section>' +
       '<section class="country-context" aria-label="Контекст страны">' +
         '<div><span>Часть мира</span><strong>' + escapeHtml(zoneLabel(entry.countryProfile.zone)) + '</strong></div>' +
         '<div><span>Язык</span><strong>' + escapeHtml(entry.countryProfile.languages) + '</strong><small>' + escapeHtml(languageAccessLabel(entry.countryProfile.languageAccess)) + '</small></div>' +
@@ -812,8 +863,8 @@
         '<div><span>Паспорт</span><strong>' + escapeHtml(passportSignal(entry.countryProfile)) + '</strong><small>сравнение с RU, не гарантия получения</small></div>' +
       '</section>' +
       '<div class="legal-stack">' +
-        '<div class="legal-step active"><span>01 · вход</span><strong>' + escapeHtml(entry.entry) + '</strong><small>' + escapeHtml(entry.stay) + ' · ' + escapeHtml(entry.renewable) + '</small></div>' +
-        '<div class="legal-step ' + (outcomeRank >= 2 ? "active" : "missing") + '"><span>02 · residence</span><strong>' + (outcomeRank >= 2 ? escapeHtml(outcomeLabel(entry.outcome)) : "Не доказан") + '</strong><small>' + (outcomeRank >= 2 ? "Маршрут моделируется как residence outcome." : "Нужна смена основания; текущий status не обещает ПМЖ.") + '</small></div>' +
+        '<div class="legal-step active"><span>01 · основание входа</span><strong>' + escapeHtml(entry.entry) + '</strong><small>' + escapeHtml(entry.stay) + ' · продление: ' + escapeHtml(entry.renewable) + '</small></div>' +
+        '<div class="legal-step ' + (outcomeRank >= 2 ? "active" : "missing") + '"><span>02 · residence</span><strong>' + (outcomeRank >= 2 ? "ВНЖ / residence stage" : "Не доказан") + '</strong><small>' + (outcomeRank >= 2 ? "Законное проживание входит в маршрут; точный статус и продление смотрите в основании." : "Нужна смена основания; текущий status не обещает ВНЖ или ПМЖ.") + '</small></div>' +
         '<div class="legal-step ' + (outcomeRank >= 3 ? "active" : "missing") + '"><span>03 · citizenship</span><strong>' + (outcomeRank >= 3 ? escapeHtml(entry.citizenshipYears + " лет до права подать") : "Clock не подтверждён") + '</strong><small>' + (outcomeRank >= 3 ? "Dual: " + escapeHtml(entry.dual) + " · право подать ≠ паспорт" : "Не использовать этот route как citizenship anchor.") + '</small></div>' +
       '</div>' +
       '<section class="drawer-section"><h3>Ресурсы и права</h3><div class="drawer-grid">' +
@@ -842,6 +893,7 @@
         renderDrawerCity(entry, Number(button.dataset.cityIndex));
       });
     });
+    $("#drawerBackdrop").hidden = false;
     $("#drawerBackdrop").classList.add("open");
     $("#drawerBackdrop").setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
@@ -868,12 +920,14 @@
   function closeDrawer() {
     $("#drawerBackdrop").classList.remove("open");
     $("#drawerBackdrop").setAttribute("aria-hidden", "true");
+    $("#drawerBackdrop").hidden = true;
     document.body.style.overflow = "";
     if (lastFocus && typeof lastFocus.focus === "function") lastFocus.focus();
   }
 
   function openMethod() {
     lastFocus = document.activeElement;
+    $("#methodBackdrop").hidden = false;
     $("#methodBackdrop").classList.add("open");
     $("#methodBackdrop").setAttribute("aria-hidden", "false");
     document.body.style.overflow = "hidden";
@@ -883,8 +937,25 @@
   function closeMethod() {
     $("#methodBackdrop").classList.remove("open");
     $("#methodBackdrop").setAttribute("aria-hidden", "true");
+    $("#methodBackdrop").hidden = true;
     document.body.style.overflow = "";
     if (lastFocus && typeof lastFocus.focus === "function") lastFocus.focus();
+  }
+
+  function trapDialogFocus(event, container) {
+    var focusable = $$('a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])', container).filter(function (element) {
+      return !element.hidden && element.getClientRects().length > 0;
+    });
+    if (!focusable.length) return;
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   function togglePin(id) {
@@ -920,6 +991,11 @@
     $("#workModeHint").classList.toggle("risk", state.workMode === "hands-on");
   }
 
+  function renderPresenceField() {
+    var field = $("#presenceField");
+    field.hidden = state.level !== "citizenship";
+  }
+
   function syncForm() {
     $("#nationalityInput").value = state.nationality;
     $("#adultsInput").value = state.adults;
@@ -939,6 +1015,7 @@
     $("#skillTextInput").value = state.skillText;
     $("#horizonInput").value = state.horizon;
     $("#horizonOutput").textContent = state.horizon + " лет";
+    $("#presenceInput").value = state.presence;
     $("#studyInput").checked = state.study;
     $("#talentInput").checked = state.talent;
     $("#childPlanInput").checked = state.childPlan;
@@ -947,6 +1024,7 @@
     $("#searchInput").value = state.search;
     $("#sortInput").value = state.sort;
     renderWorkHint();
+    renderPresenceField();
     $$("[data-weight]").forEach(function (input) {
       input.value = state.weights[input.dataset.weight];
       input.parentElement.querySelector("output").textContent = input.value;
@@ -959,6 +1037,7 @@
     element.addEventListener(eventName, function (event) {
       state[key] = type === "checkbox" ? event.target.checked : type === "number" ? Number(event.target.value || 0) : event.target.value;
       if (key === "level") state.stayStyle = stayStyleForLevel(state.level);
+      if (key === "level") renderPresenceField();
       if (key === "horizon") $("#horizonOutput").textContent = state.horizon + " лет";
       if (key === "workMode") renderWorkHint();
       markCalculationDirty();
@@ -983,6 +1062,7 @@
     bindProfileInput("skillSectorInput", "skillSector", "text");
     bindProfileInput("skillTextInput", "skillText", "text");
     bindProfileInput("horizonInput", "horizon", "number");
+    bindProfileInput("presenceInput", "presence", "text");
     bindProfileInput("studyInput", "study", "checkbox");
     bindProfileInput("talentInput", "talent", "checkbox");
     bindProfileInput("childPlanInput", "childPlan", "checkbox");
@@ -1065,8 +1145,10 @@
     });
 
     $("#shortlist").addEventListener("click", function (event) {
-      var button = event.target.closest("[data-open]");
-      if (button) openDrawer(button.dataset.open);
+      var openButton = event.target.closest("[data-open]");
+      var pinButton = event.target.closest("[data-pin]");
+      if (openButton) openDrawer(openButton.dataset.open);
+      if (pinButton) togglePin(pinButton.dataset.pin);
     });
     $("#routeList").addEventListener("click", function (event) {
       var openButton = event.target.closest("[data-open]");
@@ -1075,8 +1157,10 @@
       if (pinButton) togglePin(pinButton.dataset.pin);
     });
     $("#compareTable").addEventListener("click", function (event) {
-      var button = event.target.closest("[data-remove-pin]");
-      if (button) togglePin(button.dataset.removePin);
+      var removeButton = event.target.closest("[data-remove-pin]");
+      var openButton = event.target.closest("[data-open]");
+      if (removeButton) togglePin(removeButton.dataset.removePin);
+      if (openButton) openDrawer(openButton.dataset.open);
     });
 
     $("#drawerClose").addEventListener("click", closeDrawer);
@@ -1085,9 +1169,14 @@
     $("#methodClose").addEventListener("click", closeMethod);
     $("#methodBackdrop").addEventListener("click", function (event) { if (event.target === event.currentTarget) closeMethod(); });
     document.addEventListener("keydown", function (event) {
-      if (event.key !== "Escape") return;
-      if ($("#drawerBackdrop").classList.contains("open")) closeDrawer();
-      if ($("#methodBackdrop").classList.contains("open")) closeMethod();
+      if (event.key === "Escape") {
+        if ($("#drawerBackdrop").classList.contains("open")) closeDrawer();
+        else if ($("#methodBackdrop").classList.contains("open")) closeMethod();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      if ($("#drawerBackdrop").classList.contains("open")) trapDialogFocus(event, $("#routeDrawer"));
+      if ($("#methodBackdrop").classList.contains("open")) trapDialogFocus(event, $("#methodDialog"));
     });
 
     $("#goCompareButton").addEventListener("click", function () {

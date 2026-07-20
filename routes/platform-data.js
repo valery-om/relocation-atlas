@@ -3,12 +3,11 @@
 
   window.ATLAS_DATA = {
     meta: {
-      version: "0.4.0",
+      version: "0.5.0",
       schemaVersion: 4,
       checkedAt: "2026-07-17",
       nationality: "RU",
       screeningUniverse: 57,
-      methodology: "../research/platform/architecture.md",
       legalDisclaimer: "Score сортирует варианты и не является вероятностью выдачи визы, ВНЖ, ПМЖ или гражданства."
     },
     nationalities: [
@@ -560,6 +559,7 @@
         id: "ar-rentista", country: "Аргентина", code: "AR", flag: "🇦🇷", region: "Южная Америка", outcome: "citizenship", visaType: "independent",
         route: "Rentista / самостоятельный доход", entry: "temporary residence", stay: "продлеваемая residence", renewable: "да",
         summary: "Самый быстрый обычный citizenship clock, но два года без выездов — реальный hard blocker.",
+        presenceDemand: { kind: "continuous-no-exit", durationYears: 2, note: "Два года непрерывного проживания без выездов." },
         incomeMin: 0, fundsMin: 0, investmentMin: 0, applyCost: 500, citizenshipYears: 2,
         spouse: "Family temporary residence; separate filing", remoteWork: "yes", localWork: "yes", dual: "uncertain",
         availability: { RU: { status: "eligible", note: "No nationality exclusion in route; dual-citizenship conclusion needs written check." } },

@@ -9,10 +9,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Commissioner:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=0.4.2">
+  <link rel="stylesheet" href="styles.css?v=0.5.0">
 </head>
 <body>
-  <a class="skip-link" href="#atlas">Перейти к маршрутам</a>
+  <a class="skip-link" href="#atlas">Перейти к анкете</a>
 
   <header class="topbar">
     <a class="brand" href="#top" aria-label="Атлас переезда — наверх">
@@ -36,14 +36,23 @@
     </nav>
   </header>
 
+  <nav class="journey-nav" aria-label="Разделы Атласа">
+    <a href="#atlas">Подобрать</a>
+    <a href="#decision">Результат</a>
+    <a href="#compareSection">Сравнение</a>
+    <a href="#visaCatalog">Визы</a>
+    <a href="#explorer">Страны</a>
+    <a href="#coverage">Данные</a>
+  </nav>
+
   <main id="top">
     <section class="hero">
       <div class="hero-copy">
         <div class="eyebrow">Навигационная система для жизни</div>
         <h1>Не страна.<br><em>Траектория.</em></h1>
-        <p>Сначала решите, что вам нужно: пожить, закрепиться или построить второе гражданство. Атлас разделит эти цели, проверит бюджет и покажет, где заканчивается каждый маршрут.</p>
+        <p>Проверьте, где вы сможете легально жить и работать — и ведёт ли выбранное основание к ВНЖ или гражданству. Атлас сопоставит бюджет, семью и ограничения, а затем покажет источники и неизвестные.</p>
         <div class="hero-actions">
-          <a class="primary-button" href="#atlas">Собрать свой маршрут <span>↓</span></a>
+          <a class="primary-button" href="#atlas">Рассчитать маршрут <span>↓</span></a>
           <button class="text-button" type="button" data-open-method>Как обновляются данные</button>
         </div>
       </div>
@@ -82,8 +91,15 @@
         </div>
 
         <form id="profileForm">
+          <ol class="form-steps" aria-label="Четыре шага анкеты">
+            <li><b>01</b><span>Кто и зачем</span></li>
+            <li><b>02</b><span>Деньги</span></li>
+            <li><b>03</b><span>Образ жизни</span></li>
+            <li><b>04</b><span>Работа</span></li>
+          </ol>
+
           <fieldset>
-            <legend>Кто переезжает</legend>
+            <legend>01 · Кто и зачем</legend>
             <label class="field">
               <span>Гражданство</span>
               <select id="nationalityInput" name="nationality">
@@ -102,20 +118,44 @@
                 <input id="childrenInput" name="children" type="number" min="0" max="8" step="1" value="0">
               </label>
             </div>
+            <label class="field">
+              <span>Какой результат вам нужен</span>
+              <select id="levelInput" name="level">
+                <option value="temporary">Пожить сезон / попробовать</option>
+                <option value="residence">Переехать и получить ВНЖ</option>
+                <option value="citizenship">Строить путь к гражданству</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Горизонт планирования</span>
+              <div class="range-row">
+                <input id="horizonInput" name="horizon" type="range" min="1" max="12" step="1" value="6">
+                <output id="horizonOutput">6 лет</output>
+              </div>
+            </label>
+            <label class="field" id="presenceField" hidden>
+              <span>Сможете непрерывно жить в стране весь citizenship clock?</span>
+              <select id="presenceInput" name="presence">
+                <option value="unsure">Пока не знаю</option>
+                <option value="can-stay">Да, допускаю до 2 лет без выездов</option>
+                <option value="need-travel">Нет, нужны регулярные поездки</option>
+              </select>
+              <small>Это отдельный hard constraint: короткий срок до подачи не означает свободу путешествовать.</small>
+            </label>
           </fieldset>
 
           <fieldset>
-            <legend>Деньги в USD</legend>
+            <legend>02 · Деньги в USD</legend>
             <label class="field money-field">
-              <span>Текущий доход семьи / мес.</span>
+              <span>Текущий доход семьи / мес. <small>ресурс</small></span>
               <input id="incomeInput" name="income" type="number" min="0" step="100" value="4000">
             </label>
             <label class="field money-field">
-              <span>Сколько тратите сейчас / мес.</span>
+              <span>Сколько тратите сейчас / мес. <small>база сравнения</small></span>
               <input id="currentSpendInput" name="currentSpend" type="number" min="0" step="100" value="2200">
             </label>
             <label class="field money-field">
-              <span>Максимум готовы тратить / мес.</span>
+              <span>Максимум готовы тратить / мес. <small>верхняя граница</small></span>
               <input id="budgetInput" name="budget" type="number" min="500" step="100" value="2500">
             </label>
             <div class="two-fields">
@@ -124,14 +164,14 @@
                 <input id="savingsInput" name="savings" type="number" min="0" step="1000" value="15000">
               </label>
               <label class="field money-field compact">
-                <span>Инвестиции</span>
+                <span>Инвестиции <small>отдельно от накоплений</small></span>
                 <input id="investmentInput" name="investment" type="number" min="0" step="5000" value="0">
               </label>
             </div>
           </fieldset>
 
           <fieldset>
-            <legend>Как хотите жить</legend>
+            <legend>03 · Образ жизни</legend>
             <label class="field">
               <span>Часть мира</span>
               <select id="zoneInput" name="zone">
@@ -171,25 +211,10 @@
                 </select>
               </label>
             </div>
-            <label class="field">
-              <span>Какой результат вам нужен</span>
-              <select id="levelInput" name="level">
-                <option value="temporary">Пожить сезон / попробовать</option>
-                <option value="residence">Переехать и получить ВНЖ</option>
-                <option value="citizenship">Строить путь к гражданству</option>
-              </select>
-            </label>
-            <label class="field">
-              <span>Горизонт планирования</span>
-              <div class="range-row">
-                <input id="horizonInput" name="horizon" type="range" min="1" max="12" step="1" value="6">
-                <output id="horizonOutput">6 лет</output>
-              </div>
-            </label>
           </fieldset>
 
           <fieldset>
-            <legend>Как будете зарабатывать</legend>
+            <legend>04 · Работа и основания</legend>
             <label class="field">
               <span>Формат работы</span>
               <select id="workModeInput" name="workMode">
@@ -218,10 +243,7 @@
               <input id="skillTextInput" name="skillText" type="text" maxlength="120" placeholder="Например: маникюр, frontend, преподавание">
             </label>
             <p class="work-mode-hint" id="workModeHint"></p>
-          </fieldset>
-
-          <fieldset>
-            <legend>Допустимые основания</legend>
+            <div class="grounds-label">Допустимые основания</div>
             <label class="switch-row"><span>Готовы учиться очно</span><input id="studyInput" type="checkbox" checked><i></i></label>
             <label class="switch-row"><span>Есть talent-гипотеза</span><input id="talentInput" type="checkbox"><i></i></label>
             <label class="switch-row"><span>Ребёнок — реальный семейный план</span><input id="childPlanInput" type="checkbox"><i></i></label>
@@ -247,7 +269,7 @@
         </form>
       </aside>
 
-      <div class="atlas-main">
+      <div class="atlas-main" id="decision">
         <section class="calculation-gate" id="calculationGate" aria-labelledby="calculationGateTitle">
           <span class="panel-index">RESULT / 02</span>
           <div class="gate-orbit" aria-hidden="true"><i></i><b>→</b></div>
@@ -260,14 +282,15 @@
         <div class="results-flow" id="resultsFlow" hidden>
         <section class="result-overview" id="resultStart" aria-label="Текущий результат">
           <div class="overview-main">
-            <span>Текущий лидер</span>
+            <span id="leaderRole">Текущий лидер</span>
             <strong id="leaderName">—</strong>
             <small id="leaderReason">Введите координаты — атлас пересчитает маршрут</small>
+            <p class="leader-constraint"><b>Проверить:</b> <span id="leaderConstraint">—</span></p>
           </div>
           <div class="overview-stat"><span>Уровень жизни</span><strong id="lifestyleSignal">—</strong></div>
           <div class="overview-stat"><span>Останется от дохода</span><strong id="incomeRemainder">—</strong></div>
           <div class="overview-stat"><span>Ваша работа</span><strong id="workSignal">—</strong></div>
-          <div class="overview-stat"><span>Сравнить</span><strong id="pinnedCount">0/3</strong></div>
+          <div class="overview-stat fit-explainer"><span>Сравнительный fit</span><strong id="leaderScore">—</strong><small>не вероятность одобрения</small></div>
         </section>
 
         <section class="shortlist-section" aria-labelledby="shortlistTitle">
@@ -276,15 +299,33 @@
               <span class="panel-index">YOUR MATCHES / 02</span>
               <h2 id="shortlistTitle">Три ближайшие<br><em>траектории</em></h2>
             </div>
-            <p>Красная линия — hard blocker. Жёлтая — маршрут возможен, но перед действием остались непроверенные условия.</p>
+            <p>Разные роли для одного решения: быстрый старт, закрепление и citizenship anchor — где данные это позволяют. Fit помогает сортировать, но не предсказывает одобрение.</p>
           </div>
           <div class="shortlist" id="shortlist"></div>
+        </section>
+
+        <section class="compare-section" id="compareSection" aria-labelledby="compareTitle">
+          <div class="section-heading">
+            <div>
+              <span class="panel-index">COMPARE / 03</span>
+              <h2 id="compareTitle">Сравнить.<br><em>Потом выбрать.</em></h2>
+            </div>
+            <p id="compareHint">Закрепите до трёх карточек. Здесь появится сравнение стоимости, статуса, работы и источников.</p>
+          </div>
+          <div class="compare-empty" id="compareEmpty">
+            <div class="empty-compass">⌖</div>
+            <strong>Пока нечего сравнивать</strong>
+            <span>Добавьте 2–3 варианта прямо из персональных траекторий или каталога.</span>
+          </div>
+          <div class="compare-table-wrap" id="compareTableWrap" hidden>
+            <table class="compare-table" id="compareTable"></table>
+          </div>
         </section>
 
         <section class="visa-catalog" id="visaCatalog" aria-labelledby="visaCatalogTitle">
           <div class="section-heading visa-catalog-heading">
             <div>
-              <span class="panel-index">VISA TYPES / 03</span>
+              <span class="panel-index">VISA TYPES / 04</span>
               <h2 id="visaCatalogTitle">Не название.<br><em>Основание входа.</em></h2>
             </div>
             <p>Тип визы и финальный outcome разделены. Одна talent-виза может быть временной, другая — сразу давать permanent status.</p>
@@ -293,10 +334,10 @@
           <div class="visa-catalog-focus" id="visaCatalogFocus" aria-live="polite"></div>
         </section>
 
-        <section class="explorer-section" aria-labelledby="explorerTitle">
+        <section class="explorer-section" id="explorer" aria-labelledby="explorerTitle">
           <div class="section-heading explorer-heading">
             <div>
-              <span class="panel-index">WORLD INDEX / 04</span>
+              <span class="panel-index">WORLD INDEX / 05</span>
               <h2 id="explorerTitle">Глобальный<br><em>экран</em></h2>
             </div>
             <div class="explorer-tools">
@@ -339,25 +380,7 @@
           <button class="load-more" id="loadMoreButton" type="button">Показать ещё <span>↓</span></button>
         </section>
 
-        <section class="compare-section" id="compareSection" aria-labelledby="compareTitle">
-          <div class="section-heading">
-            <div>
-              <span class="panel-index">COMPARE / 05</span>
-              <h2 id="compareTitle">Один экран.<br><em>Три маршрута.</em></h2>
-            </div>
-            <p id="compareHint">Закрепите до трёх карточек. Здесь появится сравнение стоимости, статуса, работы и источников.</p>
-          </div>
-          <div class="compare-empty" id="compareEmpty">
-            <div class="empty-compass">⌖</div>
-            <strong>Пока нечего сравнивать</strong>
-            <span>Нажмите «+ сравнить» на карточке маршрута.</span>
-          </div>
-          <div class="compare-table-wrap" id="compareTableWrap" hidden>
-            <table class="compare-table" id="compareTable"></table>
-          </div>
-        </section>
-
-        <section class="coverage-section" aria-labelledby="coverageTitle">
+        <section class="coverage-section" id="coverage" aria-labelledby="coverageTitle">
           <div class="coverage-copy">
             <span class="panel-index">DATA ROOM / 06</span>
             <h2 id="coverageTitle">Что уже известно —<br><em>и что ещё нет</em></h2>
@@ -397,15 +420,15 @@
     <button type="button" id="goCompareButton">Открыть <b id="dockCount">0</b>/3 ↑</button>
   </div>
 
-  <div class="drawer-backdrop" id="drawerBackdrop" aria-hidden="true">
-    <aside class="route-drawer" id="routeDrawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle">
+  <div class="drawer-backdrop" id="drawerBackdrop" aria-hidden="true" hidden>
+    <aside class="route-drawer" id="routeDrawer" role="dialog" aria-modal="true" aria-labelledby="drawerTitle" tabindex="-1">
       <button class="drawer-close" id="drawerClose" type="button" aria-label="Закрыть">×</button>
       <div id="drawerContent"></div>
     </aside>
   </div>
 
-  <div class="method-backdrop" id="methodBackdrop" aria-hidden="true">
-    <section class="method-dialog" role="dialog" aria-modal="true" aria-labelledby="methodTitle">
+  <div class="method-backdrop" id="methodBackdrop" aria-hidden="true" hidden>
+    <section class="method-dialog" id="methodDialog" role="dialog" aria-modal="true" aria-labelledby="methodTitle" tabindex="-1">
       <button class="drawer-close" id="methodClose" type="button" aria-label="Закрыть методику">×</button>
       <span class="panel-index">METHOD / LIVE DATA</span>
       <h2 id="methodTitle">Не «база ответов».<br><em>Система обновлений.</em></h2>
@@ -426,7 +449,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="../routes/platform-data.js?v=0.4.0"></script>
-  <script src="app.js?v=0.4.1"></script>
+  <script src="../routes/platform-data.js?v=0.5.0"></script>
+  <script src="app.js?v=0.5.0"></script>
 </body>
 </html>
