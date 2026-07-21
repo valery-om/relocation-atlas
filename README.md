@@ -1,50 +1,57 @@
 # Relocation Atlas
 
-Relocation Atlas is a privacy-first decision engine that turns fragmented immigration options into a transparent path from temporary stay to residence and citizenship.
+**From “Where can we go?” to a relocation plan your family can inspect.**
 
-[Open the live demo](https://atlas.valeryom.com/) · [OpenAI Build Week](https://openai.devpost.com/)
+[Open the English judge demo](https://atlas.valeryom.com/dashboard/?lang=en#top) · [Open the default experience](https://atlas.valeryom.com/) · [OpenAI Build Week](https://openai.devpost.com/)
 
-## Why this exists
+## Why it exists
 
-Relocation decisions are often framed as “Which country is best?” That hides the most important differences:
+Moving countries is not one decision. A visa can let someone enter without permitting their real work, supporting their family, or leading to permanent residence or citizenship.
 
-- a temporary visa may not count toward permanent residence;
-- a residence permit may not lead to citizenship;
-- a status may not authorize the user's real work;
-- rules may differ by passport, family composition, physical presence, or consular access;
-- lifestyle fit and legal eligibility are not the same score.
-
-Atlas starts with the outcome a household needs, evaluates hard blockers, and then compares softer preferences without presenting a ranking as a probability of approval.
-
-## What the public beta includes
-
-- 40 routes across 35 countries;
-- 50 city planning profiles;
-- 63 route-source links;
-- 11 official-source work profiles;
-- three independent legal outcomes: temporary stay, residence, and citizenship path;
-- eight visa families kept separate from outcome;
-- household budget, work model, geography, climate, family, and time-horizon inputs;
-- hard blockers, source freshness, confidence, unknowns, work rights, and family consequences;
-- local-only profile storage with manual JSON import/export.
-
-The first researched nationality layer is for Russian passport holders. Ukrainian and Belarusian layers are visible as planned work and are not treated as equivalent without verification.
+Relocation Atlas starts with the outcome a household needs, applies hard constraints before preferences, and keeps the reasoning visible. It is not a country quiz and its score is not a probability of approval.
 
 ## Two-minute judge path
 
-1. Open <https://atlas.valeryom.com/>.
-2. Keep the fictional default household or change its budget/work preferences.
-3. Choose a target outcome: temporary, residence, or citizenship.
-4. Press the large calculate button.
-5. Review the leader and three trajectories.
-6. Open a route and inspect its legal chain, work status, family effect, sources, freshness, and unknowns.
-7. Change an answer: the old result disappears until recalculation.
+No account, API key, or personal data is required.
 
-The interface is currently optimized for Russian-speaking users; the Devpost description, demo narration, captions, and testing guide provide the English judging path.
+1. Open the [English judge path](https://atlas.valeryom.com/dashboard/?lang=en#top).
+2. Select **Load judge demo**. An anonymous fictional household is loaded and calculated automatically.
+3. Review the leader and three trajectories. Comparative fit, blockers, and unknowns remain separate.
+4. Open a route. Inspect its legal outcome chain, work and family signals, checked date, confidence, and official sources.
+5. Open **Compare**, then **My Plan**. The demo includes an anchor, fallback, research route, three cities, five separate readiness gates, and a verification board.
+6. Change one profile answer. The old result and plan become stale until recalculation.
+7. Download **My Plan JSON**. The full fictional decision snapshot is assembled locally in the browser.
+
+## What the beta includes
+
+- 40 routes across 35 countries;
+- 50 city planning profiles and 63 route-source links;
+- 11 official-source work profiles;
+- an initial child-education layer for the United Kingdom, Germany, and Portugal;
+- separate temporary, residence, and citizenship outcomes;
+- budget, work, family, city, presence, confidence, checked-date, and unknown signals;
+- one isolated what-if scenario and a user-controlled finalist round;
+- local-only profile, progress, and plan storage with JSON import/export;
+- reversible Russian/English presentation over one model and one dated dataset.
+
+The first researched nationality layer is for Russian passport holders. Ukrainian and Belarusian layers are planned and are not treated as equivalent without verification.
+
+## The final product layer
+
+The July 20 release completed the path from recommendation to action:
+
+| Layer | What a judge can verify |
+|---|---|
+| Explainable decision | One leader, three trajectory roles, visible blockers, strict-presence constraints, confidence, dates, and sources |
+| `My Plan` | Profile, comparison, blockers, unknowns, source dates, verification board, and local JSON export |
+| What-if | One isolated alternative for budget, presence, work, or family without changing the real profile |
+| Child and education | Separate dependent, education-route, accompanying-parent, and nursery/school signals |
+| Finalist round | User-owned anchor/fallback/research roles, dated cities, and five independent readiness gates |
+| Judge access | Reversible English presentation, anonymous demo, stable long-page navigation, and mobile/keyboard reliability |
 
 ## Run locally
 
-No API keys, account, package manager, or build step are required.
+The public artifact is dependency-free. It needs no package manager, account, backend, or build step.
 
 ```sh
 git clone https://github.com/valery-om/relocation-atlas.git
@@ -52,56 +59,73 @@ cd relocation-atlas
 python3 -m http.server 8000
 ```
 
-Open <http://localhost:8000/>. The root page redirects to `/dashboard/`.
+Open <http://localhost:8000/?lang=en#top>. The root page preserves the language and section when it redirects to `/dashboard/`.
 
 ## Architecture
 
 ```text
 index.html
 dashboard/
-  index.html       semantic UI and questionnaire
+  index.html       semantic product journey
   styles.css       responsive visual system
-  app.js           profile, validation, ranking, rendering, import/export
+  app.js           profile, decision model, state, rendering, import/export
+  i18n.js          reversible RU/EN presentation layer
+  favicon.svg      Atlas browser mark
 routes/
-  platform-data.js dated public route/country/city/work snapshot
+  platform-data.js dated derived route/country/city/work/family dataset
 ```
 
-The public repository is the runnable, judge-safe artifact. The private research workspace uses a deterministic schema validator and a privacy-gated build that copies only these runtime files. Evidence, personal intake, internal status, and research notes are not included.
+The public repository is the runnable judge artifact. A private research workspace owns the official-source notes, deterministic schema validator, and privacy-gated build. The gate copies only the interface, public documentation, license, and dated derived dataset; personal intake, evidence, internal decisions, status, skills, and research notes are excluded.
 
 ## Built with Codex and GPT-5.6
 
-The project was created during the OpenAI Build Week submission period. Codex with GPT-5.6 acted as the primary research, product, engineering, and QA partner:
+Relocation Atlas was created during the OpenAI Build Week submission period. Codex with GPT-5.6 was the primary product, engineering, research, and QA environment.
 
-- researched official sources and separated canonical facts from derived UI data;
-- designed the route, country, city, nationality, work-right, source, and freshness schema;
-- implemented and refactored the dependency-free application;
-- created deterministic schema and publication checks;
-- tested desktop/mobile behavior and debugged state and cache issues;
-- automated a privacy-safe GitHub Pages deployment;
-- documented decisions through Issues, commits, and a shared UX contract.
+Codex provided the agentic workspace and tool execution layer: repository inspection, research workflows, implementation, GitHub coordination, browser testing, failure diagnosis, validation, and release verification. GPT-5.6 powered the long-horizon reasoning and code generation in the primary build thread.
 
-Codex provided the agentic workspace and tool execution layer. GPT-5.6 was the model recorded in the primary build thread and powered the multi-step reasoning and code generation: route-constraint analysis, schema design, implementation/refactoring, validator construction, failure diagnosis, and browser-QA evaluation.
+Specific contributions included:
 
-The app intentionally has no runtime AI or server dependency. GPT-5.6 is not a decorative API call; its meaningful integration is the core Codex development workflow that created and verified the product. The user experience remains fast, inspectable, and local-first.
+- translating official-source research into a normalized route/country/city/work/family schema;
+- separating visa family from legal outcome and hard blockers from comparative fit;
+- implementing the bilingual local-first application and profile migrations;
+- designing stale-result behavior, isolated what-if scenarios, finalist roles, and portable plan export;
+- building schema and privacy checks before publication;
+- debugging state, cache, responsive, keyboard, and drawer behavior through browser QA.
 
-## Build timeline
+The final app intentionally has no runtime AI dependency. GPT-5.6's meaningful role is the auditable build workflow that created and challenged the system, rather than a chatbot added for presentation.
 
-- July 14, 2026 — workspace and operating protocol created;
-- July 15 — global route research, interactive Atlas, three-level outcome model, visa taxonomy, and validator;
-- July 17 — livelihood/work layer, local privacy model, static build, responsive UX stabilization, and public deployment;
-- July 19 — shared UX contract and final validated publication.
+Primary Codex build Session ID: `019f6036-929c-75a1-85ec-bf115ad5ad0a`.
 
-The commit history provides dated evidence for the work completed inside the submission window.
+## Decisions that shaped the product
 
-## Data, privacy, and limitations
+**Outcome before country.** Temporary stay, residence, and citizenship answer different questions.
+
+**A score cannot erase a stop sign.** Unauthorized work, nationality restrictions, insufficient resources, incompatible presence, and unknown facts remain visible.
+
+**The user owns the conclusion.** Atlas can narrow the field; only the user assigns an anchor or fallback. Those roles never rewrite legal data.
+
+**Privacy is architectural.** Questionnaire answers and downloaded plans stay local. No user account or server-side profile exists.
+
+## Build trail
+
+- July 14, 2026 — workspace and first commit;
+- July 15 — global route screen, interactive Atlas, three-level outcome model, visa taxonomy, and validator;
+- July 17 — livelihood/work layer, privacy-gated static build, responsive stabilization, and custom domain;
+- July 19 — shared UX contract and validated public artifact;
+- July 20 — explainable consumer journey, `My Plan`, what-if analysis, child-education layer, finalist roles, English judge path, favicon, and scroll stabilization.
+
+The dated commit history and primary Codex Session ID provide the build-window evidence.
+
+## Data, privacy, and limits
 
 - Questionnaire answers stay in browser `localStorage`; there is no server-side profile.
-- JSON import/export is initiated by the user.
-- Source dates and gaps are visible in the UI.
-- City costs are broad planning ranges, not live quotes or personal budgets.
-- A route score is not a legal opinion or approval probability.
-- Immigration rules change; users must verify current official requirements before acting or paying.
+- JSON import/export happens only after a user action.
+- Source dates, confidence, blockers, and gaps remain visible.
+- City costs are planning ranges, not live prices or personal budgets.
+- Child-education coverage is intentionally narrow and never implies a parent's status.
+- A comparative fit score is not legal advice or an approval probability.
+- Immigration rules change; verify current official requirements before acting or paying.
 
 ## License
 
-Software source code is licensed under the MIT License. The Atlas dataset, project-authored text, visual design, and brand are © 2026 Valery OM, All Rights Reserved. Third-party names, source material, and linked content remain subject to their respective owners' terms. See [`LICENSE`](LICENSE).
+Software source code is licensed under the MIT License. The Atlas dataset, project-authored text, visual design, product name, and brand are © 2026 Valery OM, All Rights Reserved. Third-party names, official materials, and linked sources remain subject to their owners' terms. See [`LICENSE`](LICENSE).
