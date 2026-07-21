@@ -539,8 +539,8 @@ input[type="range"] { accent-color: var(--ink-3); width: 100%; }
 
 .atlas-main { min-width: 0; align-self: stretch; }
 .calculation-gate {
-  position: sticky;
-  top: calc(var(--sticky-stack-height) + 20px);
+  position: relative;
+  top: auto;
   min-height: min(720px, calc(100vh - var(--sticky-stack-height)));
   min-height: min(720px, calc(100svh - var(--sticky-stack-height)));
   padding: clamp(30px, 5vw, 72px);

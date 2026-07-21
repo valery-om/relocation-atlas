@@ -7,11 +7,11 @@
   <meta name="theme-color" content="#071715">
   <meta name="description" content="Атлас переезда — интерактивная платформа сравнения временного переезда, ВНЖ и гражданства.">
   <title>Атлас переезда — построить траекторию</title>
-  <link rel="icon" href="favicon.svg?v=0.11.2" type="image/svg+xml" sizes="any">
+  <link rel="icon" href="favicon.svg?v=0.12.0" type="image/svg+xml" sizes="any">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Commissioner:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,600;1,7..72,400&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=0.11.2">
+  <link rel="stylesheet" href="styles.css?v=0.12.0">
 </head>
 <body>
   <a class="skip-link" href="#atlas">Перейти к анкете</a>
@@ -312,7 +312,7 @@
           <h2 id="calculationGateTitle">Сначала —<br>ваши ответы.<br><em>Потом — страны.</em></h2>
           <p id="calculationGateText">Заполните анкету и нажмите «Рассчитать». Здесь появятся лидер, три ближайшие траектории и объяснение почему.</p>
           <div class="gate-steps"><span><b>01</b>анкета</span><span><b>02</b>расчёт</span><span><b>03</b>сравнение</span></div>
-          <button class="gate-calculate-button" id="gateCalculateButton" type="button">Рассчитать сейчас →</button>
+          <button class="gate-calculate-button" id="gateCalculateButton" type="submit" form="profileForm">Рассчитать сейчас →</button>
         </section>
 
         <div class="results-flow" id="resultsFlow" hidden>
@@ -664,8 +664,8 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="../routes/platform-data.js?v=0.11.2"></script>
-  <script src="i18n.js?v=0.11.2"></script>
-  <script src="app.js?v=0.11.2"></script>
+  <script src="../routes/platform-data.js?v=0.12.0"></script>
+  <script src="i18n.js?v=0.12.0"></script>
+  <script src="app.js?v=0.12.0"></script>
 </body>
 </html>

@@ -38,7 +38,7 @@
   }
 
   var LEVEL_RANK = { temporary: 1, residence: 2, citizenship: 3 };
-  var APP_VERSION = "0.11.2";
+  var APP_VERSION = "0.12.0";
   var PLAN_VERSION = 4;
   var PROFILE_KEY = "relocation-atlas-profile-v5";
   var PLAN_BOARD_KEY = "relocation-atlas-plan-board-v1";
@@ -2426,7 +2426,6 @@
       event.preventDefault();
       calculateRoutes(true);
     });
-    $("#gateCalculateButton").addEventListener("click", function () { calculateRoutes(true); });
     $("#planCalculateButton").addEventListener("click", function () {
       var wasCalculated = hasCalculated;
       calculateRoutes(!wasCalculated);
